@@ -148,13 +148,16 @@ class SessionService:
         return [dict(r) for r in rows]
 
     def insert_objects(self, objects: list[dict]) -> int:
-        import json
         import logging
         _log = logging.getLogger("kathoros.services.session_service")
         count = 0
+        name_to_id: dict[str, int] = {}
+
+        # Pass 1 — insert all objects; collect name → id map
+        inserted: list[tuple[dict, int]] = []
         for obj in objects:
             try:
-                queries.insert_object(
+                oid = queries.insert_object(
                     self._conn,
                     self._session_id,
                     name=obj["name"],
@@ -162,12 +165,43 @@ class SessionService:
                     content=obj["description"],
                     tags=obj.get("tags", []),
                     math_expression=obj.get("math_expression", ""),
+                    latex=obj.get("latex", ""),
+                    researcher_notes=obj.get("researcher_notes", ""),
                     status="pending",
                 )
                 self._conn.commit()
+                name_to_id[obj["name"]] = oid
+                inserted.append((obj, oid))
                 count += 1
             except Exception as exc:
                 _log.warning("failed to write object %s: %s", obj.get("name"), exc)
+
+        # Pass 2 — resolve depends_on names → ids
+        for obj, oid in inserted:
+            raw = obj.get("depends_on", [])
+            if not raw:
+                continue
+            resolved = []
+            for ref in raw:
+                # ref may be a name (str) or an integer id
+                if isinstance(ref, int):
+                    resolved.append(ref)
+                elif isinstance(ref, str):
+                    if ref in name_to_id:
+                        resolved.append(name_to_id[ref])
+                    else:
+                        # try numeric string
+                        try:
+                            resolved.append(int(ref))
+                        except ValueError:
+                            _log.debug("unresolved depends_on ref %r for %r", ref, obj["name"])
+            if resolved:
+                try:
+                    queries.update_object_depends_on(self._conn, oid, resolved)
+                    self._conn.commit()
+                except Exception as exc:
+                    _log.warning("failed to set depends_on for %s: %s", obj["name"], exc)
+
         return count
 
 

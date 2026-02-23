@@ -181,6 +181,15 @@ def insert_object(conn: sqlite3.Connection, session_id: int, **fields) -> int:
     return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
 
+def update_object_depends_on(
+    conn: sqlite3.Connection, object_id: int, depends_on: list
+) -> None:
+    conn.execute(
+        "UPDATE objects SET depends_on = ? WHERE id = ?",
+        (json.dumps(depends_on), object_id),
+    )
+
+
 def update_object_status(
     conn: sqlite3.Connection, object_id: int, status: str
 ) -> None:
