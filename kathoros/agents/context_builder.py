@@ -103,6 +103,14 @@ def build_system_prompt(context: dict) -> str:
     if context.get("enforce_epistemic", True):
         parts.append(_EPISTEMIC_BLOCK)
 
+    # Claim-level ceiling
+    if context.get("max_claim_level") == "prediction":
+        parts.append(
+            "## Claim-level restriction\n"
+            "You are not permitted to propose claims beyond prediction level.\n"
+            "Do not introduce ontology upgrades."
+        )
+
     # Tool descriptions
     tool_desc = (context.get("tool_descriptions") or "").strip()
     if tool_desc:
