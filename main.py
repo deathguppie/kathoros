@@ -20,7 +20,7 @@ logging.basicConfig(
 )
 _log = logging.getLogger("kathoros.main")
 
-_LOGO = Path(__file__).parent / "kathoros" / "assets" / "logo.jpg"
+_LOGO = Path(__file__).parent / "kathoros" / "assets" / "logo.png"
 
 
 def main() -> int:

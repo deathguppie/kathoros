@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="kathoros/assets/logo.jpg" alt="Kathoros" width="480"/>
+  <img src="kathoros/assets/logo.png" alt="Kathoros" width="480"/>
 </p>
 
 <h1 align="center">Kathoros</h1>
