@@ -7,6 +7,7 @@ import logging
 from kathoros.agents.backends.ollama_backend import OllamaBackend
 from kathoros.agents.backends.anthropic_backend import AnthropicBackend
 from kathoros.agents.backends.openai_backend import OpenAIBackend
+from kathoros.agents.context_builder import build_system_prompt
 from kathoros.agents.worker import AgentWorker
 from kathoros.core.enums import TrustLevel, AccessMode
 
@@ -25,6 +26,7 @@ class AgentDispatcher:
         access_mode: str = "REQUEST_FIRST",
         session_nonce: str = "",
         system_prompt: str = "",
+        context: dict | None = None,
         on_chunk=None,
         on_tool_request=None,
         on_done=None,
@@ -49,10 +51,16 @@ class AgentDispatcher:
         trust_level = TrustLevel[agent.get("trust_level", "MONITORED").upper()]
         mode = AccessMode[access_mode.upper()]
 
+        # Resolve system prompt: rich context > explicit prompt > agent default
+        if context is not None:
+            effective_prompt = build_system_prompt(context)
+        else:
+            effective_prompt = system_prompt or agent.get("default_research_prompt", "")
+
         worker = AgentWorker(
             backend=backend,
             messages=list(self._history),
-            system_prompt=system_prompt or agent.get("default_research_prompt", ""),
+            system_prompt=effective_prompt,
             session_nonce=session_nonce,
             agent_id=str(agent.get("id", "")),
             agent_name=agent.get("name", ""),

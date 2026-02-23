@@ -131,6 +131,7 @@ class KathorosMainWindow(QMainWindow):
         self._import_mode: bool = False
         self._tool_service: ToolService | None = None
         self._git_service: GitService | None = None
+        self._selected_objects: list[dict] = []  # objects highlighted in objects panel
         self.setWindowTitle(f"{APP_NAME} — {APP_VERSION}")
         self.setMinimumSize(1200, 800)
 
@@ -280,12 +281,18 @@ class KathorosMainWindow(QMainWindow):
         self._load_objects()
 
     def _on_object_selected(self, object_id: int) -> None:
-        """Left-click: show object content in the Editor panel."""
+        """Left-click: show object content in the Editor panel and track selection."""
         if self._pm is None or self._pm.session_service is None:
             return
         obj = self._pm.session_service.get_object(object_id)
         if obj is None:
             return
+        # Track for context injection — keep at most 5 selected objects
+        self._selected_objects = [
+            o for o in self._selected_objects if o.get("id") != obj.get("id")
+        ]
+        self._selected_objects.insert(0, obj)
+        self._selected_objects = self._selected_objects[:5]
         editor = self._right_panel.findChild(EditorPanel)
         if editor is None:
             return
@@ -609,24 +616,39 @@ class KathorosMainWindow(QMainWindow):
                 self._import_panel._pending_paths = []
         nonce = self._pm.session_service.session_nonce if self._pm.session_service else ""
         self._ai_input_panel.set_busy(True)
-        # Build system prompt: research mode gets tool descriptions appended
+        # Build dispatch context (import mode uses compact prompt, research uses rich context)
         if self._import_mode:
-            system_prompt = IMPORT_SYSTEM_PROMPT
+            dispatch_context = {"import_mode": True}
         else:
+            ss = self._pm.session_service
             tool_desc = (
                 self._tool_service.get_tool_descriptions()
                 if self._tool_service else ""
             )
-            system_prompt = (
-                f"{RESEARCH_SYSTEM_PROMPT}\n\n{tool_desc}" if tool_desc
-                else RESEARCH_SYSTEM_PROMPT
-            )
+            # Fallback: use recent objects when researcher hasn't clicked anything
+            recent_objects: list[dict] = []
+            if not self._selected_objects and ss:
+                try:
+                    recent_objects = ss.list_objects(limit=5)
+                except Exception:
+                    pass
+            dispatch_context = {
+                "project_id":        self._pm._current_project_id,
+                "project_name":      self._pm.project_name or "",
+                "session_id":        ss._session_id if ss else "",
+                "user_goal":         self._pm.get_effective_settings().get("user_goal", ""),
+                "selected_objects":  self._selected_objects,
+                "recent_objects":    recent_objects,
+                "enforce_epistemic": True,
+                "session_nonce":     nonce,
+                "tool_descriptions": tool_desc,
+            }
         self._dispatcher.dispatch(
             message=text,
             agent=agent,
             access_mode=access_mode,
             session_nonce=nonce,
-            system_prompt=system_prompt,
+            context=dispatch_context,
             on_chunk=lambda chunk: None if self._import_mode else self._ai_output_panel.append_text(chunk, role="assistant"),
             on_tool_request=self._on_tool_request,
             on_error=lambda msg: self._ai_output_panel.append_text(f"Error: {msg}", role="system"),
