@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+pending/
+trash/
+artifacts/
+scripts/artifacts/
+dist/
+build/
+*.spec
+appimagetool-*.AppImage
+tmp/
+kathoros_review.txt

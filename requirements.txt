@@ -1,0 +1,30 @@
+# Core UI
+PyQt6>=6.6.0
+pymupdf>=1.23.0
+
+# Data / visualisation
+GitPython>=3.1.40
+pandas>=2.0.0
+matplotlib>=3.8.0
+networkx>=3.2.0
+numpy>=2.0.0
+Pygments>=2.19.0
+pillow>=10.0.0
+
+# AI backends
+anthropic>=0.83.0
+openai>=1.0.0
+ollama>=0.6.0
+httpx>=0.28.0
+
+# Utilities
+jsonschema>=4.21.0
+
+# Optional extras (uncomment if needed)
+# pyqtgraph>=0.13.0
+# PyQt6-QScintilla>=2.14.0
+
+# Dev / security scanning
+ruff>=0.3.0
+bandit>=1.7.7
+pip-audit>=2.7.0

@@ -1,0 +1,19 @@
+# requirements-build.txt — pinned deps for AppImage build
+# Generated from development environment.
+# Update by running: pip freeze | grep -Ei "PyQt6|PyMuPDF|anthropic|..." > requirements-build.txt
+
+PyQt6==6.10.2
+PyQt6-Qt6==6.10.2
+PyQt6_sip==13.11.0
+PyMuPDF==1.27.1
+GitPython==3.1.46
+anthropic==0.83.0
+httpx==0.28.1
+matplotlib==3.10.8
+networkx==3.6.1
+numpy==2.4.2
+ollama==0.6.1
+openai==2.21.0
+pillow==12.1.1
+Pygments==2.19.1
+pandas>=2.0
