@@ -936,7 +936,13 @@ class KathorosMainWindow(QMainWindow):
         if ss is None:
             _log.warning("no session service — cannot write objects")
             return
-        count = ss.insert_objects(objects)
+        try:
+            count = ss.insert_objects(objects)
+        except ValueError as exc:
+            # Circular dependency — surface the full explanation to the researcher
+            _log.error("import rejected: %s", exc)
+            self._ai_output_panel.append_text(str(exc), role="system")
+            return
         self._ai_output_panel.append_text(
             f"[{count} objects written to project DB]", role="system"
         )

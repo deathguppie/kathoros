@@ -149,9 +149,25 @@ class SessionService:
 
     def insert_objects(self, objects: list[dict]) -> int:
         import logging
+        from kathoros.agents.import_parser import detect_batch_cycles
         _log = logging.getLogger("kathoros.services.session_service")
         count = 0
         name_to_id: dict[str, int] = {}
+
+        # Pre-flight: reject the entire batch if any circular dependency exists.
+        # Circular depends_on in a physics ontology signals conceptual smuggling —
+        # neither object can be independently grounded. Hard error, no partial insert.
+        cycles = detect_batch_cycles(objects)
+        if cycles:
+            msg = (
+                "Import rejected — circular dependencies detected in batch.\n"
+                "Circular depends_on means neither concept can be independently "
+                "grounded (conceptual smuggling).\n\n"
+                + "\n".join(f"  Cycle: {c}" for c in cycles)
+                + "\n\nRevise the depends_on relationships and re-import."
+            )
+            _log.error(msg)
+            raise ValueError(msg)
 
         # Pass 1 — insert all objects; collect name → id map
         inserted: list[tuple[dict, int]] = []

@@ -38,6 +38,56 @@ def parse_object_suggestions(text: str) -> list[dict]:
         return []
 
 
+def detect_batch_cycles(objects: list[dict]) -> list[str]:
+    """
+    Check the depends_on name-graph of a batch for cycles before any DB write.
+
+    Returns a list of human-readable cycle descriptions (one per cycle found).
+    Empty list means the graph is acyclic and safe to insert.
+
+    Each description names every node in the cycle so the researcher can
+    identify the conceptual smuggling and correct it before re-importing.
+
+    Algorithm: iterative DFS with a per-path visited set (standard cycle
+    detection on a directed graph). Operates on names only — no DB access.
+    """
+    # Build adjacency: name → list of dependency names (within-batch only)
+    known: set[str] = {obj["name"] for obj in objects}
+    adj: dict[str, list[str]] = {}
+    for obj in objects:
+        deps = [d for d in obj.get("depends_on", []) if d in known]
+        adj[obj["name"]] = deps
+
+    cycles: list[str] = []
+    reported: set[frozenset] = set()   # avoid duplicate reports for same cycle
+
+    for start in adj:
+        # DFS from each node
+        stack: list[tuple[str, list[str]]] = [(start, [start])]
+        while stack:
+            node, path = stack.pop()
+            for neighbour in adj.get(node, []):
+                if neighbour in path:
+                    # Cycle found — extract the cycle portion of the path
+                    cycle_start = path.index(neighbour)
+                    cycle_nodes = path[cycle_start:]
+                    key = frozenset(cycle_nodes)
+                    if key not in reported:
+                        reported.add(key)
+                        cycle_str = " → ".join(cycle_nodes) + f" → {neighbour}"
+                        _log.error(
+                            "CIRCULAR DEPENDENCY in import batch: %s. "
+                            "This is a potential conceptual smuggling error — "
+                            "neither object can be independently grounded.",
+                            cycle_str,
+                        )
+                        cycles.append(cycle_str)
+                elif neighbour not in path:
+                    stack.append((neighbour, path + [neighbour]))
+
+    return cycles
+
+
 def _validate(obj: dict) -> dict | None:
     if not isinstance(obj, dict):
         return None
