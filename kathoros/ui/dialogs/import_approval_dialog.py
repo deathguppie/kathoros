@@ -20,6 +20,7 @@ class _ObjectRow(QWidget):
     def __init__(self, obj: dict, parent=None) -> None:
         super().__init__(parent)
         self._approved = True
+        self._orig = obj   # keep all fields for pass-through on get_result()
 
         # Approve checkbox
         self._check = QCheckBox()
@@ -87,12 +88,14 @@ class _ObjectRow(QWidget):
     def get_result(self) -> dict | None:
         if not self._approved:
             return None
-        return {
-            "name": self._name.text().strip(),
-            "type": self._type.currentText(),
-            "description": self._desc.toPlainText().strip(),
-            "tags": [t.strip() for t in self._tags.text().split(",") if t.strip()],
-        }
+        # Start with all original fields (preserves source_file, math_expression,
+        # latex, researcher_notes, depends_on, etc.) then overlay editable UI fields.
+        result = dict(self._orig)
+        result["name"] = self._name.text().strip()
+        result["type"] = self._type.currentText()
+        result["description"] = self._desc.toPlainText().strip()
+        result["tags"] = [t.strip() for t in self._tags.text().split(",") if t.strip()]
+        return result
 
 
 class ImportApprovalDialog(QDialog):

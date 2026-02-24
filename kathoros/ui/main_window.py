@@ -63,6 +63,19 @@ def _build_export_body(notes: list[dict], fmt: str) -> str:
     return sep.join(parts)
 
 
+def _read_file_text(path: str, max_chars: int = 12000) -> str:
+    """Read text content from a file. Handles PDF via fitz, others as plain text."""
+    from pathlib import Path
+    suffix = Path(path).suffix.lower()
+    if suffix == ".pdf":
+        import fitz
+        doc = fitz.open(path)
+        text = "\n".join(page.get_text() for page in doc)
+        doc.close()
+        return text[:max_chars]
+    return Path(path).read_text(encoding="utf-8", errors="replace")[:max_chars]
+
+
 class DocumentsTabGroup(QTabWidget):
     def __init__(self):
         super().__init__()
@@ -146,6 +159,7 @@ class KathorosMainWindow(QMainWindow):
         self._objects_panel.audit_requested.connect(self._on_audit_requested)
         self._objects_panel.object_edit_requested.connect(self._on_object_edit_requested)
         self._objects_panel.status_change_requested.connect(self._on_status_change_requested)
+        self._objects_panel.open_source_requested.connect(self._on_open_source_requested)
         self._ai_input_panel.message_submitted.connect(self._on_message_submitted)
         self._ai_input_panel.stop_requested.connect(self._on_stop_requested)
         left_panel.addWidget(self._ai_output_panel)
@@ -312,9 +326,75 @@ class KathorosMainWindow(QMainWindow):
         if obj is None:
             return
         from kathoros.ui.dialogs.object_detail_dialog import ObjectDetailDialog
-        dlg = ObjectDetailDialog(obj, self._pm.session_service, parent=self)
+        all_objects = self._objects_panel._objects if hasattr(self._objects_panel, "_objects") else []
+        docs_path = str(self._pm.project_root / "docs") if self._pm and self._pm.project_root else None
+        dlg = ObjectDetailDialog(obj, self._pm.session_service, all_objects=all_objects,
+                                 docs_path=docs_path, parent=self)
+        dlg.open_in_reader.connect(self._open_file_in_reader)
         dlg.exec()
         self._load_objects()
+
+    def _on_open_source_requested(self, object_id: int) -> None:
+        if self._pm is None or self._pm.session_service is None:
+            return
+        obj = self._pm.session_service.get_object(object_id)
+        if obj is None:
+            return
+        source_file = obj.get("source_file") or ""
+        if not source_file:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.information(self, "No Source File",
+                                    "This object has no source file set.\n"
+                                    "Open the object (double-click) and fill in the Source field.")
+            return
+        from pathlib import Path
+        candidate = Path(source_file)
+        if not (candidate.is_absolute() and candidate.exists()):
+            docs_dir = self._pm.project_root / "docs" if self._pm.project_root else None
+            if docs_dir:
+                candidate = docs_dir / source_file
+        if candidate.exists():
+            self._open_file_in_reader(str(candidate))
+        else:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.information(self, "File Not Found",
+                                    f"Could not locate '{source_file}' in the project docs/ folder.")
+
+    def _open_file_in_reader(self, path: str) -> None:
+        from pathlib import Path
+        from kathoros.ui.panels.reader_panel import ReaderPanel
+        from kathoros.ui.panels.editor_panel import EditorPanel
+
+        docs_group = self._right_panel.findChild(DocumentsTabGroup)
+
+        def _switch_docs(tab_index: int) -> None:
+            if docs_group:
+                outer = docs_group.parent()
+                while outer and not isinstance(outer, QTabWidget):
+                    outer = outer.parent()
+                if outer:
+                    for i in range(outer.count()):
+                        if outer.tabText(i) == "Documents":
+                            outer.setCurrentIndex(i)
+                            break
+                docs_group.setCurrentIndex(tab_index)
+
+        suffix = Path(path).suffix.lower()
+        if suffix == ".pdf":
+            reader = self.findChild(ReaderPanel)
+            if reader:
+                reader.load_pdf(path)
+                _switch_docs(0)   # Reader is tab 0
+        else:
+            editor = self.findChild(EditorPanel)
+            if editor:
+                try:
+                    content = Path(path).read_text(encoding="utf-8", errors="replace")
+                except Exception as exc:
+                    _log.warning("could not read %s: %s", path, exc)
+                    return
+                editor.load_content(content, filename=Path(path).name)
+                _switch_docs(1)   # Editor is tab 1
 
     def _on_status_change_requested(self, object_id: int, new_status: str) -> None:
         if self._pm is None or self._pm.session_service is None:
@@ -827,12 +907,69 @@ class KathorosMainWindow(QMainWindow):
         if not paths:
             return
         self._pending_import_paths = paths
+
+        from pathlib import Path
+        json_paths    = [p for p in paths if Path(p).suffix.lower() == ".json"]
+        content_paths = [p for p in paths if Path(p).suffix.lower() != ".json"]
+
+        # JSON files are already in import format — skip AI, go straight to approval
+        if json_paths and not content_paths:
+            self._import_json_directly(json_paths)
+            return
+
+        # Content files (pdf, md, tex, py) — read text and send to AI
         self._import_mode = True
-        names = ", ".join(p.split("/")[-1] for p in paths)
-        self._ai_input_panel._input.setPlainText(
-            f"Analyze and suggest research objects for: {names}"
-        )
+        blocks = []
+        for p in content_paths:
+            try:
+                text = _read_file_text(p)
+                blocks.append(f"=== {Path(p).name} ===\n{text}")
+            except Exception as exc:
+                _log.warning("could not read %s: %s", p, exc)
+
+        if blocks:
+            prompt = (
+                "Extract and structure research objects from the following content. "
+                "Respond with ONLY a JSON array in the Kathoros import format.\n\n"
+                + "\n\n".join(blocks)
+            )
+        else:
+            names = ", ".join(Path(p).name for p in paths)
+            prompt = f"Analyze and suggest research objects for: {names}"
+
+        self._ai_input_panel._input.setPlainText(prompt)
         self._ai_input_panel._input.setFocus()
+
+    def _import_json_directly(self, paths: list) -> None:
+        """Parse pre-formatted JSON import files without going through the AI."""
+        from pathlib import Path
+        from kathoros.agents.import_parser import parse_object_suggestions
+        suggestions = []
+        for p in paths:
+            try:
+                text = Path(p).read_text(encoding="utf-8")
+                parsed = parse_object_suggestions(text)
+                fname = Path(p).name
+                for obj in parsed:
+                    if not obj.get("source_file"):
+                        obj["source_file"] = fname
+                suggestions.extend(parsed)
+                _log.info("parsed %d objects from %s", len(parsed), fname)
+            except Exception as exc:
+                _log.warning("failed to parse JSON import %s: %s", p, exc)
+
+        if not suggestions:
+            self._ai_output_panel.append_text(
+                "[No valid objects found in selected JSON files]", role="system"
+            )
+            return
+
+        dialog = ImportApprovalDialog(suggestions, parent=self)
+        if dialog.exec() != ImportApprovalDialog.DialogCode.Accepted:
+            return
+        approved = dialog.results
+        if approved:
+            self._write_objects_to_db(approved)
 
     def _on_tool_request(self, req: dict) -> None:
         if self._import_mode:
@@ -923,6 +1060,12 @@ class KathorosMainWindow(QMainWindow):
                 "[No structured objects found in response]", role="system"
             )
             return
+        # Backfill source_file for objects that didn't get one from the AI
+        import_names = [p.split("/")[-1] for p in (self._pending_import_paths or [])]
+        fallback_source = ", ".join(import_names) if import_names else ""
+        for s in suggestions:
+            if not s.get("source_file") and fallback_source:
+                s["source_file"] = fallback_source
         dialog = ImportApprovalDialog(suggestions, parent=self)
         if dialog.exec() != ImportApprovalDialog.DialogCode.Accepted:
             return

@@ -17,6 +17,10 @@ from PyQt6.QtGui import QColor
 
 _log = logging.getLogger("kathoros.ui.panels.objects_panel")
 
+# Custom roles
+_ROLE_OBJ_ID    = Qt.ItemDataRole.UserRole          # int object id, or None for source items
+_ROLE_SRC_PARENT = Qt.ItemDataRole(Qt.ItemDataRole.UserRole.value + 1)  # parent obj id on source items
+
 _STATUS = {
     "pending":      ("●", "#f0c040"),
     "audited":      ("●", "#4090f0"),
@@ -42,6 +46,7 @@ class ObjectsPanel(QWidget):
     status_change_requested = pyqtSignal(int, str)
     refresh_requested = pyqtSignal()
     audit_requested = pyqtSignal(int)
+    open_source_requested = pyqtSignal(int)  # open source file in reader
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -106,10 +111,9 @@ class ObjectsPanel(QWidget):
     def _rebuild_tree(self) -> None:
         self._tree.clear()
 
-        id_to_obj  = {obj["id"]: obj for obj in self._objects}
         id_to_item: dict[int, QTreeWidgetItem] = {}
 
-        # Build all items first
+        # Build all object items first
         for obj in self._objects:
             item = self._make_item(obj)
             id_to_item[obj["id"]] = item
@@ -133,6 +137,19 @@ class ObjectsPanel(QWidget):
             if obj["id"] not in placed:
                 self._tree.addTopLevelItem(id_to_item[obj["id"]])
 
+        # Add source-file child branch to every object that has one
+        for obj in self._objects:
+            src = (obj.get("source_file") or "").strip()
+            if not src:
+                continue
+            basename = src.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+            src_item = QTreeWidgetItem([f"  📄  {basename}", ""])
+            src_item.setData(0, _ROLE_OBJ_ID, None)
+            src_item.setData(0, _ROLE_SRC_PARENT, obj["id"])
+            src_item.setForeground(0, QColor("#5a8fa8"))
+            src_item.setToolTip(0, src)
+            id_to_item[obj["id"]].addChild(src_item)
+
         self._tree.expandAll()
 
     def _make_item(self, obj: dict) -> QTreeWidgetItem:
@@ -140,7 +157,7 @@ class ObjectsPanel(QWidget):
         abbrev = _TYPE_ABBREV.get(obj.get("type", ""), obj.get("type", ""))
         name = obj.get("name", "?")
         item = QTreeWidgetItem([f"[{abbrev}]  {name}", icon])
-        item.setData(0, Qt.ItemDataRole.UserRole, obj["id"])
+        item.setData(0, _ROLE_OBJ_ID, obj["id"])
         item.setForeground(0, QColor("#cccccc"))
         item.setForeground(1, QColor(color))
         item.setTextAlignment(1, Qt.AlignmentFlag.AlignCenter)
@@ -154,38 +171,57 @@ class ObjectsPanel(QWidget):
         items = self._tree.selectedItems()
         if not items:
             return None
-        return items[0].data(0, Qt.ItemDataRole.UserRole)
+        return items[0].data(0, _ROLE_OBJ_ID)
 
     def _on_selection_changed(self) -> None:
-        oid = self._current_id()
-        has_sel = oid is not None
-        self._audit_btn.setEnabled(has_sel)
-        if has_sel:
+        items = self._tree.selectedItems()
+        if not items:
+            self._audit_btn.setEnabled(False)
+            return
+        item = items[0]
+        oid = item.data(0, _ROLE_OBJ_ID)
+        src_parent = item.data(0, _ROLE_SRC_PARENT)
+        if oid is not None:
+            self._audit_btn.setEnabled(True)
             self.object_selected.emit(oid)
+        elif src_parent is not None:
+            self._audit_btn.setEnabled(False)
+            self.open_source_requested.emit(src_parent)
 
     def _on_double_clicked(self, item: QTreeWidgetItem, column: int) -> None:
-        oid = item.data(0, Qt.ItemDataRole.UserRole)
+        oid = item.data(0, _ROLE_OBJ_ID)
+        src_parent = item.data(0, _ROLE_SRC_PARENT)
         if oid is not None:
             self.object_edit_requested.emit(oid)
+        elif src_parent is not None:
+            self.open_source_requested.emit(src_parent)
 
     def _on_context_menu(self, pos) -> None:
         item = self._tree.itemAt(pos)
         if item is None:
             return
-        oid = item.data(0, Qt.ItemDataRole.UserRole)
+        oid = item.data(0, _ROLE_OBJ_ID)
+        src_parent = item.data(0, _ROLE_SRC_PARENT)
         menu = QMenu(self)
-        menu.addAction("View / Edit...", lambda: self.object_edit_requested.emit(oid))
-        menu.addAction("Audit...", lambda: self.audit_requested.emit(oid))
-        menu.addSeparator()
-        status_menu = menu.addMenu("Set Status")
-        for s in ("pending", "audited", "flagged", "disputed"):
-            status_menu.addAction(
-                s.capitalize(),
-                lambda checked=False, st=s: self.status_change_requested.emit(oid, st),
-            )
-        menu.addSeparator()
-        name = item.text(0).split("  ", 1)[-1] if "  " in item.text(0) else item.text(0)
-        menu.addAction("Copy Name", lambda: QApplication.clipboard().setText(name))
+        if oid is not None:
+            menu.addAction("View / Edit...", lambda: self.object_edit_requested.emit(oid))
+            menu.addAction("Open Source in Reader", lambda: self.open_source_requested.emit(oid))
+            menu.addAction("Audit...", lambda: self.audit_requested.emit(oid))
+            menu.addSeparator()
+            status_menu = menu.addMenu("Set Status")
+            for s in ("pending", "audited", "flagged", "disputed"):
+                status_menu.addAction(
+                    s.capitalize(),
+                    lambda checked=False, st=s: self.status_change_requested.emit(oid, st),
+                )
+            menu.addSeparator()
+            name = item.text(0).split("  ", 1)[-1] if "  " in item.text(0) else item.text(0)
+            menu.addAction("Copy Name", lambda: QApplication.clipboard().setText(name))
+        elif src_parent is not None:
+            menu.addAction("Open in Reader", lambda: self.open_source_requested.emit(src_parent))
+            tooltip = item.toolTip(0)
+            if tooltip:
+                menu.addAction("Copy Path", lambda: QApplication.clipboard().setText(tooltip))
         menu.exec(self._tree.mapToGlobal(pos))
 
     def _on_audit_clicked(self) -> None:

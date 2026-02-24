@@ -51,6 +51,8 @@ class SessionService:
         import json
         if "tags" in fields and isinstance(fields["tags"], list):
             fields["tags"] = json.dumps(fields["tags"])
+        if "depends_on" in fields and isinstance(fields["depends_on"], list):
+            fields["depends_on"] = json.dumps(fields["depends_on"])
         queries.update_object(self._conn, object_id, **fields)
         self._conn.commit()
         return {"ok": True, "object_id": object_id}
@@ -183,6 +185,7 @@ class SessionService:
                     math_expression=obj.get("math_expression", ""),
                     latex=obj.get("latex", ""),
                     researcher_notes=obj.get("researcher_notes", ""),
+                    source_file=obj.get("source_file", ""),
                     status="pending",
                 )
                 self._conn.commit()

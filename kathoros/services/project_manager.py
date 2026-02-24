@@ -121,10 +121,10 @@ class ProjectManager:
 
     def open_project(self, name: str) -> dict:
         """
-        Open an existing project by directory name.
+        Open an existing project by name.
         Returns project info dict.
         """
-        project_dir = PROJECTS_DIR / name
+        project_dir = PROJECTS_DIR / _safe_dirname(name)
         db_path = project_dir / PROJECT_DB_NAME
 
         if not db_path.exists():

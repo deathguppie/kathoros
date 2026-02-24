@@ -520,3 +520,12 @@ PROJECT_MIGRATIONS.append((
         """,
     ],
 ))
+
+# Append v5 to PROJECT_MIGRATIONS
+PROJECT_MIGRATIONS.append((
+    5,
+    "source_file column on objects — tracks originating paper, note, or dataset",
+    [
+        "ALTER TABLE objects ADD COLUMN source_file TEXT",
+    ],
+))

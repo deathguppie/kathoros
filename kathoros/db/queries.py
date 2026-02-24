@@ -153,12 +153,12 @@ def insert_object(conn: sqlite3.Connection, session_id: int, **fields) -> int:
             (session_id, name, type, status, content, math_expression, latex,
              tags, related_objects, depends_on, contradicts,
              source_conversation_ref, attached_files,
-             researcher_notes, ai_suggested_tags)
+             researcher_notes, ai_suggested_tags, source_file)
         VALUES
             (:session_id, :name, :type, :status, :content, :math_expression, :latex,
              :tags, :related_objects, :depends_on, :contradicts,
              :source_conversation_ref, :attached_files,
-             :researcher_notes, :ai_suggested_tags)
+             :researcher_notes, :ai_suggested_tags, :source_file)
         """,
         {
             "session_id": session_id,
@@ -176,6 +176,7 @@ def insert_object(conn: sqlite3.Connection, session_id: int, **fields) -> int:
             "attached_files": json.dumps(fields.get("attached_files", [])),
             "researcher_notes": fields.get("researcher_notes"),
             "ai_suggested_tags": json.dumps(fields.get("ai_suggested_tags", [])),
+            "source_file": fields.get("source_file"),
         },
     )
     return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
@@ -563,7 +564,7 @@ def get_conflict_rulings(conn, audit_session_id) -> list:
 # ---------------------------------------------------------------------------
 
 _OBJECT_EDITABLE = {"name", "type", "content", "math_expression",
-                    "latex", "tags", "researcher_notes"}
+                    "latex", "tags", "researcher_notes", "source_file", "depends_on"}
 
 
 def update_object(conn: sqlite3.Connection, object_id: int, **fields) -> None:

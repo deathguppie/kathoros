@@ -13,9 +13,9 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLabel, QLineEdit, QComboBox, QPlainTextEdit,
     QTabWidget, QWidget, QPushButton, QDialogButtonBox,
-    QSizePolicy,
+    QSizePolicy, QMessageBox,
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 
 _log = logging.getLogger("kathoros.ui.dialogs.object_detail_dialog")
@@ -54,15 +54,24 @@ QPushButton:pressed { background: #444; }
 
 
 class ObjectDetailDialog(QDialog):
+    open_in_reader = pyqtSignal(str)   # emitted with resolved file path
+
     def __init__(
         self,
         object_data: dict,
         session_service,
+        all_objects: list | None = None,
+        docs_path: str | None = None,
         parent=None,
     ) -> None:
         super().__init__(parent)
         self._data = object_data
         self._session_service = session_service
+        self._docs_path = docs_path
+        # Build lookup maps for depends_on name↔id resolution
+        _objs = all_objects or []
+        self._id_to_name: dict[int, str] = {o["id"]: o["name"] for o in _objs}
+        self._name_to_id: dict[str, int] = {o["name"]: o["id"] for o in _objs}
 
         self.setWindowTitle("Object Detail")
         self.setMinimumSize(700, 550)
@@ -152,6 +161,32 @@ class ObjectDetailDialog(QDialog):
             tags_list = list(tags_raw)
         self._tags_edit = QLineEdit(", ".join(str(t) for t in tags_list))
         form.addRow("Tags:", self._tags_edit)
+
+        source_row = QHBoxLayout()
+        self._source_edit = QLineEdit(self._data.get("source_file", "") or "")
+        self._source_edit.setPlaceholderText("filename, DOI, arXiv ID, or citation…")
+        open_source_btn = QPushButton("Open in Reader")
+        open_source_btn.setFixedWidth(110)
+        open_source_btn.clicked.connect(self._on_open_source)
+        source_row.addWidget(self._source_edit)
+        source_row.addWidget(open_source_btn)
+        source_widget = QWidget()
+        source_widget.setLayout(source_row)
+        form.addRow("Source:", source_widget)
+
+        # Depends On — editable as comma-separated object names
+        raw_deps = self._data.get("depends_on", "[]")
+        if isinstance(raw_deps, str):
+            try:
+                dep_ids = json.loads(raw_deps)
+            except (json.JSONDecodeError, ValueError):
+                dep_ids = []
+        else:
+            dep_ids = list(raw_deps) if raw_deps else []
+        dep_names = [self._id_to_name.get(int(d), str(d)) for d in dep_ids if d is not None]
+        self._depends_edit = QLineEdit(", ".join(dep_names))
+        self._depends_edit.setPlaceholderText("Object names this depends on, comma-separated…")
+        form.addRow("Depends On:", self._depends_edit)
 
         self._notes_edit = QPlainTextEdit(self._data.get("researcher_notes", "") or "")
         self._notes_edit.setFixedHeight(90)
@@ -258,6 +293,30 @@ class ObjectDetailDialog(QDialog):
     # Save
     # ------------------------------------------------------------------
 
+    def _on_open_source(self) -> None:
+        from pathlib import Path
+        raw = self._source_edit.text().strip()
+        if not raw:
+            QMessageBox.information(self, "No Source", "No source file is set for this object.")
+            return
+        candidate = Path(raw)
+        # Try as absolute path first
+        if candidate.is_absolute() and candidate.exists():
+            self.open_in_reader.emit(str(candidate))
+            return
+        # Try relative to docs/ directory
+        if self._docs_path:
+            rel = Path(self._docs_path) / raw
+            if rel.exists():
+                self.open_in_reader.emit(str(rel))
+                return
+        # Not found as a local file — may be DOI/arXiv ID etc.
+        QMessageBox.information(
+            self, "File Not Found",
+            f"Could not locate '{raw}' as a local file.\n\n"
+            "If this is a DOI or arXiv ID, search for it manually in your browser.",
+        )
+
     def _save(self) -> None:
         object_id = self._data.get("id")
         if object_id is None:
@@ -267,6 +326,10 @@ class ObjectDetailDialog(QDialog):
 
         tags_text = self._tags_edit.text()
         tags_list = [t.strip() for t in tags_text.split(",") if t.strip()]
+
+        # Resolve depends_on names → ids; unknown names are dropped
+        dep_names_raw = [n.strip() for n in self._depends_edit.text().split(",") if n.strip()]
+        dep_ids = [self._name_to_id[n] for n in dep_names_raw if n in self._name_to_id]
 
         try:
             self._session_service.update_object(
@@ -278,6 +341,8 @@ class ObjectDetailDialog(QDialog):
                 latex=self._latex_edit.toPlainText(),
                 tags=tags_list,
                 researcher_notes=self._notes_edit.toPlainText(),
+                source_file=self._source_edit.text().strip(),
+                depends_on=dep_ids,
             )
         except Exception as exc:
             _log.error("update_object failed: %s", exc)
