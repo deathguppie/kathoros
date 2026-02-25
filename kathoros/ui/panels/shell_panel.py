@@ -17,7 +17,7 @@ import struct
 import subprocess
 import termios
 
-from PyQt6.QtCore import Qt, QSocketNotifier, pyqtSlot
+from PyQt6.QtCore import Qt, QSocketNotifier, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QFont, QTextCursor
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -27,10 +27,67 @@ from PyQt6.QtWidgets import (
 _log = logging.getLogger("kathoros.ui.panels.shell_panel")
 
 # Strip ANSI/VT100 colour and formatting codes for plain-text display.
-# Cursor-movement sequences are also stripped; readline line-editing is
-# therefore not visually accurate, but basic usage (type → Enter → output)
-# works correctly.
 _ANSI_RE = re.compile(r'\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+
+
+def _key_to_bytes(event) -> bytes | None:
+    """Convert a QKeyEvent to the byte sequence to send to the pty."""
+    key  = event.key()
+    mods = event.modifiers()
+    ctrl = bool(mods & Qt.KeyboardModifier.ControlModifier)
+
+    if ctrl:
+        mapping = {
+            Qt.Key.Key_C: b"\x03",
+            Qt.Key.Key_D: b"\x04",
+            Qt.Key.Key_Z: b"\x1a",
+            Qt.Key.Key_L: b"\x0c",
+            Qt.Key.Key_A: b"\x01",
+            Qt.Key.Key_E: b"\x05",
+            Qt.Key.Key_U: b"\x15",
+            Qt.Key.Key_K: b"\x0b",
+            Qt.Key.Key_W: b"\x17",
+        }
+        if key in mapping:
+            return mapping[key]
+        return None   # let Ctrl+C copy, etc. fall through
+
+    specials = {
+        Qt.Key.Key_Up:        b"\x1b[A",
+        Qt.Key.Key_Down:      b"\x1b[B",
+        Qt.Key.Key_Right:     b"\x1b[C",
+        Qt.Key.Key_Left:      b"\x1b[D",
+        Qt.Key.Key_Home:      b"\x1b[H",
+        Qt.Key.Key_End:       b"\x1b[F",
+        Qt.Key.Key_Delete:    b"\x1b[3~",
+        Qt.Key.Key_PageUp:    b"\x1b[5~",
+        Qt.Key.Key_PageDown:  b"\x1b[6~",
+        Qt.Key.Key_Return:    b"\r",
+        Qt.Key.Key_Enter:     b"\r",
+        Qt.Key.Key_Backspace: b"\x7f",
+        Qt.Key.Key_Tab:       b"\t",
+        Qt.Key.Key_Escape:    b"\x1b",
+    }
+    if key in specials:
+        return specials[key]
+
+    text = event.text()
+    if text:
+        return text.encode("utf-8")
+    return None
+
+
+class _TermWidget(QPlainTextEdit):
+    """Read-only display that forwards every keystroke to the pty."""
+    key_pressed = pyqtSignal(bytes)
+
+    def keyPressEvent(self, event) -> None:
+        data = _key_to_bytes(event)
+        if data:
+            self.key_pressed.emit(data)
+        else:
+            # Pass through non-terminal keys (e.g. Ctrl+C copy)
+            super().keyPressEvent(event)
 
 
 class ShellPanel(QWidget):
@@ -69,13 +126,13 @@ class ShellPanel(QWidget):
         bar_widget.setFixedHeight(28)
 
         # ── Terminal pane ────────────────────────────────────────────────
-        self._output = QPlainTextEdit()
+        self._output = _TermWidget()
         self._output.setFont(font)
         self._output.setStyleSheet(
             "QPlainTextEdit { background: #1a1a1a; color: #cccccc; border: none; }"
         )
-        self._output.setReadOnly(False)
-        self._output.installEventFilter(self)
+        self._output.setReadOnly(True)
+        self._output.key_pressed.connect(self._send_bytes)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -105,67 +162,6 @@ class ShellPanel(QWidget):
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         self._sync_pty_size()
-
-    def eventFilter(self, obj, event) -> bool:
-        if obj is self._output and event.type() == event.Type.KeyPress:
-            return self._forward_key(event)
-        return super().eventFilter(obj, event)
-
-    # ── Key forwarding ────────────────────────────────────────────────────
-
-    def _forward_key(self, event) -> bool:
-        key  = event.key()
-        mods = event.modifiers()
-        ctrl = bool(mods & Qt.KeyboardModifier.ControlModifier)
-
-        # ── Ctrl combos ──────────────────────────────────────────────────
-        if ctrl:
-            mapping = {
-                Qt.Key.Key_C: b"\x03",   # SIGINT
-                Qt.Key.Key_D: b"\x04",   # EOF
-                Qt.Key.Key_Z: b"\x1a",   # SIGTSTP
-                Qt.Key.Key_L: b"\x0c",   # clear screen
-                Qt.Key.Key_A: b"\x01",   # beginning of line
-                Qt.Key.Key_E: b"\x05",   # end of line
-                Qt.Key.Key_U: b"\x15",   # kill to beginning
-                Qt.Key.Key_K: b"\x0b",   # kill to end
-                Qt.Key.Key_W: b"\x17",   # delete word
-            }
-            if key in mapping:
-                self._send_bytes(mapping[key])
-                return True
-            # Let Ctrl+C copy selected text through normally
-            if key == Qt.Key.Key_C and self._output.textCursor().hasSelection():
-                return False
-
-        # ── Navigation / special keys ─────────────────────────────────
-        specials = {
-            Qt.Key.Key_Up:        b"\x1b[A",
-            Qt.Key.Key_Down:      b"\x1b[B",
-            Qt.Key.Key_Right:     b"\x1b[C",
-            Qt.Key.Key_Left:      b"\x1b[D",
-            Qt.Key.Key_Home:      b"\x1b[H",
-            Qt.Key.Key_End:       b"\x1b[F",
-            Qt.Key.Key_Delete:    b"\x1b[3~",
-            Qt.Key.Key_PageUp:    b"\x1b[5~",
-            Qt.Key.Key_PageDown:  b"\x1b[6~",
-            Qt.Key.Key_Return:    b"\r",
-            Qt.Key.Key_Enter:     b"\r",
-            Qt.Key.Key_Backspace: b"\x7f",
-            Qt.Key.Key_Tab:       b"\t",
-            Qt.Key.Key_Escape:    b"\x1b",
-        }
-        if key in specials:
-            self._send_bytes(specials[key])
-            return True
-
-        # ── Printable characters ─────────────────────────────────────
-        text = event.text()
-        if text:
-            self._send_bytes(text.encode("utf-8"))
-            return True
-
-        return False
 
     # ── Internal ──────────────────────────────────────────────────────────
 
@@ -222,10 +218,10 @@ class ShellPanel(QWidget):
         self._append(text)
 
     def _append(self, text: str) -> None:
-        cursor = self._output.textCursor()
-        cursor.movePosition(QTextCursor.MoveOperation.End)
+        # Insert via the document cursor — works even when the widget is read-only
+        cursor = self._output.document().rootFrame().lastCursorPosition()
         cursor.insertText(text)
-        self._output.setTextCursor(cursor)
+        self._output.moveCursor(QTextCursor.MoveOperation.End)
         self._output.ensureCursorVisible()
 
     def _send_bytes(self, data: bytes) -> None:
