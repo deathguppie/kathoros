@@ -7,6 +7,7 @@ import logging
 from kathoros.agents.backends.ollama_backend import OllamaBackend
 from kathoros.agents.backends.anthropic_backend import AnthropicBackend
 from kathoros.agents.backends.openai_backend import OpenAIBackend
+from kathoros.agents.backends.gemini_backend import GeminiBackend
 from kathoros.agents.context_builder import build_system_prompt
 from kathoros.agents.worker import AgentWorker
 from kathoros.core.enums import TrustLevel, AccessMode
@@ -45,6 +46,8 @@ class AgentDispatcher:
             backend = AnthropicBackend(model=model)
         elif provider == "openai":
             backend = OpenAIBackend(model=model)
+        elif provider == "gemini":
+            backend = GeminiBackend(model=model)
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 

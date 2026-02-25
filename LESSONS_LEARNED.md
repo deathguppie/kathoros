@@ -203,3 +203,27 @@ the primary work area (Documents tab) at startup.
 - Run in a `tempfile.mkdtemp()` directory with `-output-directory=<tmp>` to avoid polluting
   the working directory.
 - 30-second timeout is sufficient for typical research documents.
+
+---
+
+## Adding a New Agent Backend Provider
+
+**Pattern:** All agent backends (`OllamaBackend`, `AnthropicBackend`, `OpenAIBackend`,
+`GeminiBackend`) follow the same contract:
+
+1. **New file:** `kathoros/agents/backends/<provider>_backend.py` with a class exposing
+   `stream(messages, on_chunk, on_done, on_error, system_prompt)` and `test_connection() -> bool`.
+2. **Dispatcher:** Add `elif provider == "<name>":` in `kathoros/agents/dispatcher.py`.
+3. **Agent dialog:** Add `"<name>"` to the provider combo in `agent_dialog.py`.
+4. **Settings panel:** Add `("<name>", "Label")` to the API key providers list in `settings_panel.py`.
+
+**Security checklist (SECURITY_CONSTRAINTS.md §14):**
+- API key loaded via `load_key()` inside method calls, never in `__init__`, never stored on `self`.
+- Key never logged, never injected into messages or system prompt, never persisted in snapshots.
+- Backend must not import Qt, call subprocess, or touch the DB — it is a pure API client.
+- No tool execution or approval logic — that belongs exclusively to the ToolRouter (§1.1).
+
+**Gemini-specific notes:**
+- SDK: `google-genai` (`from google import genai`), not `google-generativeai`.
+- Message format: role is `"user"` or `"model"` (not `"assistant"`).
+- System prompt goes in `config={"system_instruction": system_prompt}`, not in the messages list.

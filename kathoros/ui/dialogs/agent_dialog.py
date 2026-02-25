@@ -55,7 +55,7 @@ class AgentDialog(QDialog):
         self._type = QComboBox()
         self._type.addItems(["local", "api"])
         self._provider = QComboBox()
-        self._provider.addItems(["ollama", "anthropic", "openai", "other"])
+        self._provider.addItems(["ollama", "anthropic", "openai", "gemini", "other"])
         self._provider.setEditable(True)
         form.addRow("Type", self._type)
         form.addRow("Provider", self._provider)

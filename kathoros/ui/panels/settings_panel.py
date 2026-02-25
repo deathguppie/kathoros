@@ -130,7 +130,7 @@ class SettingsPanel(QWidget):
         form = QFormLayout(group)
 
         self._api_inputs = {}
-        for provider, label in [("anthropic", "Anthropic"), ("openai", "OpenAI")]:
+        for provider, label in [("anthropic", "Anthropic"), ("openai", "OpenAI"), ("gemini", "Gemini")]:
             row = QHBoxLayout()
             display = QLabel(masked(provider))
             display.setStyleSheet("color: #888888; min-width: 120px;")
