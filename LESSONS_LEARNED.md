@@ -110,6 +110,92 @@ columns are intentionally excluded and why.
 
 ---
 
+## QPlainTextEdit setReadOnly and Focus Policy
+
+**Problem:** Calling `setReadOnly(True)` on a `QPlainTextEdit` (or `QTextEdit`) silently resets
+the widget's focus policy to `Qt::NoFocus`. This means the widget can never receive keyboard
+focus, so `keyPressEvent` — even on a subclass — is never called.
+
+**Symptom:** Custom key handling in a subclass appears to work in isolation but does nothing
+when the widget is inside a larger application. No errors, no warnings.
+
+**Fix:** Always explicitly restore the focus policy after `setReadOnly(True)`:
+```python
+self.setReadOnly(True)
+self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)  # Qt resets this — restore it
+```
+
+---
+
+## Embedded Terminal: xterm vs pty
+
+**Problem:** `xterm -into <winId>` is unreliable for embedding:
+- Timing-dependent: the container X11 window must be mapped before xterm launches
+- Broken on Wayland/XWayland: `winId()` returns an XCB handle that xterm can't embed into
+- Restart also fails: even when the widget IS visible, embedding doesn't work consistently
+
+**Solution:** Use Python's `pty` module + `subprocess.Popen` directly:
+```python
+master_fd, slave_fd = pty.openpty()
+process = subprocess.Popen(
+    ["bash", "--login"],
+    stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
+    close_fds=True, preexec_fn=os.setsid, cwd=cwd,
+)
+os.close(slave_fd)  # parent only needs master end
+# Read from master_fd via QSocketNotifier
+```
+This is truly embedded, works on X11 and Wayland, and gives a real interactive bash session.
+
+**Send TIOCSWINSZ on resize** so tools like `ls` format to the correct column width:
+```python
+import fcntl, termios, struct
+winsize = struct.pack("HHHH", rows, cols, 0, 0)
+fcntl.ioctl(master_fd, termios.TIOCSWINSZ, winsize)
+```
+
+---
+
+## Preventing QPlainTextEdit from Editing Its Own Content
+
+**Problem:** Using an event filter (`installEventFilter`) to intercept key presses on a
+`QPlainTextEdit` is not reliable. Qt can still insert characters through the input method
+(iBus, fcitx) pipeline even when the filter returns `True`. Result: each keystroke appears
+twice (Qt inserts it, pty echoes it back).
+
+**Fix:** Subclass `QPlainTextEdit` and override `keyPressEvent` directly. Never call
+`super().keyPressEvent()` for keys you are consuming. This is called before any input method
+processing and is the only reliable interception point:
+```python
+class _TermWidget(QPlainTextEdit):
+    def keyPressEvent(self, event):
+        data = _key_to_bytes(event)
+        if data:
+            self.key_pressed.emit(data)
+            # Do NOT call super() — prevents Qt from editing the document
+        else:
+            super().keyPressEvent(event)  # allow copy, etc.
+```
+
+To write output programmatically to a read-only widget, use the document cursor directly:
+```python
+cursor = self.document().rootFrame().lastCursorPosition()
+cursor.insertText(text)  # bypasses the read-only guard on the view
+```
+
+---
+
+## Session Snapshot: Avoid Restoring Navigation State That Surprises Users
+
+**Problem:** Saving and restoring the active tab index means users always return to the last
+tab they had open — including the System/Shell tab. This is surprising on startup.
+
+**Rule:** Only restore "content" state (which document was open, which sub-tab was selected
+within a work area). Do not restore which top-level panel group was active. Always open on
+the primary work area (Documents tab) at startup.
+
+---
+
 ## pdflatex Subprocess
 
 - Always pass `-interaction=nonstopmode` to prevent pdflatex from blocking on errors.

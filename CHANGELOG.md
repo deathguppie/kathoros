@@ -1,6 +1,6 @@
 # Kathoros Changelog
 
-## [Unreleased] — 2026-02-24
+## [Unreleased] — 2026-02-24 (continued)
 
 ### Added
 - LaTeX panel moved from Mathematics tab to Documents tab (index 2, between Editor and Audit Log)
@@ -24,6 +24,17 @@
 - `_CompileWorker` signal renamed from `finished` to `compile_done` to avoid collision with `QThread.finished`
 - `_open_file_in_reader` now correctly routes `.tex` files to the LaTeX panel instead of text editor
 - LaTeX object routing checks both `latex` field and content markers, not just `latex` field
+- Shell panel: xterm `-into` embedding replaced with native pty-based terminal
+- Shell panel: unified single pane — output and input in one area, no separate input line
+- Shell panel: correct key map (Ctrl+CDLZAUEKW, arrows, Home/End, Delete, Tab, Esc)
+- Shell panel: TIOCSWINSZ sent on resize so tools like `ls` use correct column width
+- App always opens on Documents tab at startup (System tab no longer restored from session)
+
+### Fixed (shell)
+- xterm launched as floating external window due to X11 embedding timing / Wayland incompatibility → replaced entirely with pty+subprocess approach
+- `setReadOnly(True)` on `QPlainTextEdit` silently resets focus policy to `NoFocus`, blocking all keyboard input → `_TermWidget` subclass restores `StrongFocus` after `setReadOnly`
+- Double keystroke input: Qt inserted characters AND pty echoed them back → `_TermWidget` overrides `keyPressEvent` and never calls `super()` for terminal keys, widget kept read-only
+- Session snapshot was restoring System tab as the active right-panel tab on startup → outer tab index no longer saved/restored
 
 ---
 
