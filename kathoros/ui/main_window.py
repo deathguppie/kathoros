@@ -1153,10 +1153,8 @@ class KathorosMainWindow(QMainWindow):
             "selected_agent_id": self._ai_input_panel.get_selected_agent_id(),
             "access_mode": self._ai_input_panel.get_access_mode(),
         }
-        right_tab = self._right_panel.findChild(QTabWidget)
         docs_tab = self._right_panel.findChild(DocumentsTabGroup)
         snap["ui"] = {
-            "right_tab": right_tab.currentIndex() if right_tab else 0,
             "documents_tab": docs_tab.currentIndex() if docs_tab else 0,
         }
         return snap
@@ -1181,9 +1179,6 @@ class KathorosMainWindow(QMainWindow):
         if agent_snap.get("access_mode"):
             self._ai_input_panel.set_access_mode(agent_snap["access_mode"])
         ui_snap = snap.get("ui", {})
-        right_tab = self._right_panel.findChild(QTabWidget)
-        if right_tab and "right_tab" in ui_snap:
-            right_tab.setCurrentIndex(ui_snap["right_tab"])
         docs_tab = self._right_panel.findChild(DocumentsTabGroup)
         if docs_tab and "documents_tab" in ui_snap:
             docs_tab.setCurrentIndex(ui_snap["documents_tab"])

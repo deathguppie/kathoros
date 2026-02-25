@@ -78,8 +78,16 @@ def _key_to_bytes(event) -> bytes | None:
 
 
 class _TermWidget(QPlainTextEdit):
-    """Read-only display that forwards every keystroke to the pty."""
+    """Output display that forwards every keystroke to the pty."""
     key_pressed = pyqtSignal(bytes)
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setReadOnly(True)
+        # setReadOnly(True) silently resets focus policy to NoFocus in Qt,
+        # which means the widget can never receive keyboard events.
+        # Restore it explicitly so keyPressEvent fires.
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
     def keyPressEvent(self, event) -> None:
         data = _key_to_bytes(event)
@@ -131,7 +139,6 @@ class ShellPanel(QWidget):
         self._output.setStyleSheet(
             "QPlainTextEdit { background: #1a1a1a; color: #cccccc; border: none; }"
         )
-        self._output.setReadOnly(True)
         self._output.key_pressed.connect(self._send_bytes)
 
         layout = QVBoxLayout(self)
