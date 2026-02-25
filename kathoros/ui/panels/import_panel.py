@@ -14,7 +14,7 @@ from PyQt6.QtCore import pyqtSignal, Qt
 
 _log = logging.getLogger("kathoros.ui.panels.import_panel")
 
-_SUPPORTED = {".md": "📄", ".py": "🐍", ".tex": "🔬", ".json": "📦"}
+_SUPPORTED = {".md": "📄", ".txt": "📄", ".text": "📄", ".py": "🐍", ".tex": "🔬", ".json": "📦"}
 
 
 def _fmt_size(b: int) -> str:

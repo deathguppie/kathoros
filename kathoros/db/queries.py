@@ -376,7 +376,7 @@ def list_objects(
         """
         SELECT id, name, type, status, object_type, epistemic_status,
                claim_level, narrative_label, falsifiable, validation_scope,
-               created_at, updated_at
+               created_at, updated_at, source_file, depends_on, tags
         FROM objects WHERE session_id = ?
         ORDER BY created_at DESC LIMIT ? OFFSET ?
         """,

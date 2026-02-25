@@ -79,8 +79,12 @@ def _read_file_text(path: str, max_chars: int = 12000) -> str:
 class DocumentsTabGroup(QTabWidget):
     def __init__(self):
         super().__init__()
-        self.addTab(ReaderPanel(), "Reader")
-        self.addTab(EditorPanel(), "Editor")
+        self._reader_panel = ReaderPanel()
+        self._editor_panel = EditorPanel()
+        self._latex_panel = LaTeXPanel()
+        self.addTab(self._reader_panel, "Reader")
+        self.addTab(self._editor_panel, "Editor")
+        self.addTab(self._latex_panel, "LaTeX")
         self._audit_log = AuditLogPanel()
         self.addTab(self._audit_log, "Audit Log")
         self._import_panel = ImportPanel()
@@ -92,10 +96,12 @@ class DocumentsTabGroup(QTabWidget):
 class MathematicsTabGroup(QTabWidget):
     def __init__(self):
         super().__init__()
-        self.addTab(SageMathPanel(), "SageMath")
-        self.addTab(LaTeXPanel(), "LaTeX")
-        self.addTab(GraphPanel(), "Graph")
-        self.addTab(MatPlotPanel(), "MatPlot")
+        self._sagematch_panel = SageMathPanel()
+        self._graph_panel = GraphPanel()
+        self._matplot_panel = MatPlotPanel()
+        self.addTab(self._sagematch_panel, "SageMath")
+        self.addTab(self._graph_panel, "Graph")
+        self.addTab(self._matplot_panel, "MatPlot")
 
 
 class DataTabGroup(QTabWidget):
@@ -103,7 +109,8 @@ class DataTabGroup(QTabWidget):
         super().__init__()
         self._sqlite_explorer = SQLiteExplorerPanel()
         self.addTab(self._sqlite_explorer, "SQLite Explorer")
-        self.addTab(ResultsPanel(), "Results")
+        self._results_panel = ResultsPanel()
+        self.addTab(self._results_panel, "Results")
         self._search_panel = CrossProjectSearchPanel()
         self.addTab(self._search_panel, "Search")
 
@@ -125,13 +132,16 @@ class RightPanel(QWidget):
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
-        tab_widget = QTabWidget()
+        self._tab_widget = QTabWidget()
         self._docs_tab_group = DocumentsTabGroup()
-        tab_widget.addTab(self._docs_tab_group, "Documents")
-        tab_widget.addTab(MathematicsTabGroup(), "Mathematics")
-        tab_widget.addTab(DataTabGroup(), "Data")
-        tab_widget.addTab(SystemTabGroup(), "System")
-        layout.addWidget(tab_widget)
+        self._math_tab_group = MathematicsTabGroup()
+        self._data_tab_group = DataTabGroup()
+        self._system_tab_group = SystemTabGroup()
+        self._tab_widget.addTab(self._docs_tab_group, "Documents")
+        self._tab_widget.addTab(self._math_tab_group, "Mathematics")
+        self._tab_widget.addTab(self._data_tab_group, "Data")
+        self._tab_widget.addTab(self._system_tab_group, "System")
+        layout.addWidget(self._tab_widget)
 
 
 class KathorosMainWindow(QMainWindow):
@@ -148,9 +158,9 @@ class KathorosMainWindow(QMainWindow):
         self.setWindowTitle(f"{APP_NAME} — {APP_VERSION}")
         self.setMinimumSize(1200, 800)
 
-        splitter = QSplitter(Qt.Orientation.Horizontal)
+        self._splitter = QSplitter(Qt.Orientation.Horizontal)
 
-        left_panel = QSplitter(Qt.Orientation.Vertical)
+        self._left_panel = QSplitter(Qt.Orientation.Vertical)
         self._ai_output_panel = _RealAIOutputPanel()
         self._ai_input_panel = _RealAIInputPanel()
         self._objects_panel = _RealObjectsPanel()
@@ -162,22 +172,22 @@ class KathorosMainWindow(QMainWindow):
         self._objects_panel.open_source_requested.connect(self._on_open_source_requested)
         self._ai_input_panel.message_submitted.connect(self._on_message_submitted)
         self._ai_input_panel.stop_requested.connect(self._on_stop_requested)
-        left_panel.addWidget(self._ai_output_panel)
-        left_panel.addWidget(self._ai_input_panel)
-        left_panel.addWidget(self._objects_panel)
+        self._left_panel.addWidget(self._ai_output_panel)
+        self._left_panel.addWidget(self._ai_input_panel)
+        self._left_panel.addWidget(self._objects_panel)
 
         self._right_panel = RightPanel()
 
-        splitter.addWidget(left_panel)
-        splitter.addWidget(self._right_panel)
-        splitter.setStretchFactor(0, 3)
-        splitter.setStretchFactor(1, 7)
-        self.setCentralWidget(splitter)
+        self._splitter.addWidget(self._left_panel)
+        self._splitter.addWidget(self._right_panel)
+        self._splitter.setStretchFactor(0, 3)
+        self._splitter.setStretchFactor(1, 7)
+        self.setCentralWidget(self._splitter)
         self._build_menu_bar()
 
         settings = QSettings("Kathoros", "Kathoros")
         if settings.contains("splitterState"):
-            splitter.restoreState(settings.value("splitterState"))
+            self._splitter.restoreState(settings.value("splitterState"))
 
         # Wire right panel signals
         sys_tab = self._right_panel.findChild(SystemTabGroup)
@@ -189,6 +199,10 @@ class KathorosMainWindow(QMainWindow):
             sys_tab._settings_panel.settings_changed.connect(self._on_settings_changed)
             self._agent_manager = sys_tab._agent_manager
             self._settings_panel = sys_tab._settings_panel
+
+        # Wire LaTeX panel pdf_ready → open in reader
+        latex_panel = self._right_panel._docs_tab_group._latex_panel
+        latex_panel.pdf_ready.connect(self._on_latex_pdf_ready)
 
         # Startup loads
         self._load_objects()
@@ -360,6 +374,12 @@ class KathorosMainWindow(QMainWindow):
             QMessageBox.information(self, "File Not Found",
                                     f"Could not locate '{source_file}' in the project docs/ folder.")
 
+    def _on_latex_pdf_ready(self, pdf_path: str) -> None:
+        """Open a freshly compiled LaTeX PDF in the reader panel."""
+        import os
+        _log.info("pdf_ready received: path=%s exists=%s", pdf_path, os.path.exists(pdf_path))
+        self._open_file_in_reader(pdf_path)
+
     def _open_file_in_reader(self, path: str) -> None:
         from pathlib import Path
         from kathoros.ui.panels.reader_panel import ReaderPanel
@@ -382,6 +402,7 @@ class KathorosMainWindow(QMainWindow):
         suffix = Path(path).suffix.lower()
         if suffix == ".pdf":
             reader = self.findChild(ReaderPanel)
+            _log.info("opening PDF in reader: reader=%s path=%s", reader, path)
             if reader:
                 reader.load_pdf(path)
                 _switch_docs(0)   # Reader is tab 0
@@ -929,8 +950,20 @@ class KathorosMainWindow(QMainWindow):
 
         if blocks:
             prompt = (
-                "Extract and structure research objects from the following content. "
-                "Respond with ONLY a JSON array in the Kathoros import format.\n\n"
+                "Extract and structure research objects from the following content.\n"
+                "Respond with ONLY a valid JSON array. Each element must include:\n"
+                "  name         — short title of the concept, theorem, or result\n"
+                "  type         — one of: concept, definition, derivation, prediction, evidence, open_question, data\n"
+                "  description  — plain-text summary (1-3 sentences)\n"
+                "  latex        — verbatim LaTeX source for the primary equation, theorem, or formula (copy exactly from source; empty string if none)\n"
+                "  math_expression — ASCII/Unicode representation of the key formula (empty string if none)\n"
+                "  researcher_notes — caveats, open questions, or context (empty string if none)\n"
+                "  tags         — list of keyword strings\n"
+                "  depends_on   — list of names of other objects in this batch that this one logically depends on\n"
+                "  source_file  — original filename\n\n"
+                "For .tex files: always populate the latex field by copying the relevant equation or theorem environment verbatim.\n"
+                "For .py files: extract simulation models, algorithms, and numerical results as data/evidence/derivation objects; include key formulas or parameter definitions in math_expression.\n"
+                "For .txt files: extract claims, observations, and conclusions as concept/evidence/open_question objects.\n\n"
                 + "\n\n".join(blocks)
             )
         else:

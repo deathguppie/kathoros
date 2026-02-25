@@ -1,19 +1,18 @@
 """
-LaTeXPanel — LaTeX editor with pdflatex compilation and PDF preview.
-Left: editor. Right: rendered PDF page.
+LaTeXPanel — LaTeX editor with pdflatex compilation.
+On success emits pdf_ready(path) so the main window can open the PDF in the reader.
 No DB calls.
 """
 import logging
 import subprocess
 import tempfile
 import os
-from pathlib import Path
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
-    QPlainTextEdit, QLabel, QPushButton, QScrollArea
+    QWidget, QVBoxLayout, QHBoxLayout,
+    QPlainTextEdit, QPushButton, QLabel
 )
-from PyQt6.QtCore import pyqtSignal, QThread, Qt
-from PyQt6.QtGui import QFont, QPixmap, QImage
+from PyQt6.QtCore import pyqtSignal, QThread
+from PyQt6.QtGui import QFont, QKeySequence, QShortcut
 from kathoros.ui.panels.syntax_highlighter import PygmentsHighlighter
 
 _log = logging.getLogger("kathoros.ui.panels.latex_panel")
@@ -33,16 +32,19 @@ Hello, world!
 
 
 class _CompileWorker(QThread):
-    finished = pyqtSignal(str, bool)  # (pdf_path_or_error, success)
+    compile_done = pyqtSignal(str, bool)  # (pdf_path_or_error, success)
 
     def __init__(self, source: str) -> None:
         super().__init__()
         self._source = source
 
     def run(self) -> None:
+        import logging
+        log = logging.getLogger("kathoros.latex.worker")
         tmp_dir = tempfile.mkdtemp()
         tex_path = os.path.join(tmp_dir, "doc.tex")
         pdf_path = os.path.join(tmp_dir, "doc.pdf")
+        log.info("pdflatex start tmp_dir=%s", tmp_dir)
         try:
             with open(tex_path, "w") as f:
                 f.write(self._source)
@@ -51,19 +53,24 @@ class _CompileWorker(QThread):
                  f"-output-directory={tmp_dir}", tex_path],
                 capture_output=True, text=True, timeout=30,
             )
-            if os.path.exists(pdf_path):
-                self.finished.emit(pdf_path, True)
+            exists = os.path.exists(pdf_path)
+            size = os.path.getsize(pdf_path) if exists else 0
+            log.info("pdflatex done rc=%d pdf_exists=%s pdf_size=%d", result.returncode, exists, size)
+            if exists:
+                self.compile_done.emit(pdf_path, True)
             else:
-                self.finished.emit(result.stdout + result.stderr, False)
+                log.warning("pdflatex stdout: %s", result.stdout[-300:])
+                self.compile_done.emit(result.stdout + result.stderr, False)
         except subprocess.TimeoutExpired:
-            self.finished.emit("Compile timed out (30s)", False)
+            self.compile_done.emit("Compile timed out (30s)", False)
         except Exception as exc:
-            self.finished.emit(str(exc), False)
+            self.compile_done.emit(str(exc), False)
 
 
 class LaTeXPanel(QWidget):
     compile_requested = pyqtSignal(str)
     compile_finished = pyqtSignal(bool)
+    pdf_ready = pyqtSignal(str)   # emitted with PDF path on successful compile
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -73,7 +80,6 @@ class LaTeXPanel(QWidget):
         font.setStyleHint(QFont.StyleHint.Monospace)
         font.setPointSize(11)
 
-        # Editor (left)
         self._editor = QPlainTextEdit()
         self._editor.setFont(font)
         self._editor.setStyleSheet(
@@ -82,36 +88,24 @@ class LaTeXPanel(QWidget):
         self._editor.setPlainText(_DEFAULT_TEX)
         self._highlighter = PygmentsHighlighter(self._editor.document(), "latex")
 
-        # Preview (right)
-        self._preview_label = QLabel()
-        self._preview_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
-        self._preview_label.setStyleSheet("background: #1a1a1a;")
-        self._scroll = QScrollArea()
-        self._scroll.setWidget(self._preview_label)
-        self._scroll.setWidgetResizable(True)
-        self._scroll.setStyleSheet("QScrollArea { background: #1a1a1a; border: none; }")
-
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.addWidget(self._editor)
-        splitter.addWidget(self._scroll)
-        splitter.setSizes([500, 500])
-
-        # Toolbar
-        self._compile_btn = QPushButton("Compile")
+        self._compile_btn = QPushButton("Compile  [F5]")
         self._compile_btn.clicked.connect(self.compile)
+        self._shortcut = QShortcut(QKeySequence("F5"), self)
+        self._shortcut.activated.connect(self.compile)
         self._status = QLabel("Ready")
         self._status.setStyleSheet("color: #888888; padding: 0 8px;")
         self._error_btn = QPushButton("Errors ▼")
         self._error_btn.setCheckable(True)
         self._error_btn.toggled.connect(self._toggle_errors)
 
-        toolbar = QHBoxLayout()
+        self._toolbar = QWidget()
+        toolbar = QHBoxLayout(self._toolbar)
+        toolbar.setContentsMargins(0, 0, 0, 0)
         toolbar.addWidget(self._compile_btn)
         toolbar.addWidget(self._status)
         toolbar.addStretch()
         toolbar.addWidget(self._error_btn)
 
-        # Error panel
         self._error_panel = QPlainTextEdit()
         self._error_panel.setReadOnly(True)
         self._error_panel.setFont(font)
@@ -123,26 +117,38 @@ class LaTeXPanel(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
-        layout.addWidget(splitter, stretch=1)
-        layout.addLayout(toolbar)
+        layout.addWidget(self._editor, stretch=1)
+        layout.addWidget(self._toolbar)
         layout.addWidget(self._error_panel)
 
     def compile(self) -> None:
         source = self._editor.toPlainText()
+        # Auto-wrap fragments that lack a documentclass
+        if r"\documentclass" not in source:
+            source = (
+                r"\documentclass{article}" + "\n"
+                r"\usepackage{amsmath,amssymb,amsthm}" + "\n"
+                r"\begin{document}" + "\n"
+                + source + "\n"
+                r"\end{document}" + "\n"
+            )
+        _log.info("compile() called, source length=%d", len(source))
         self.compile_requested.emit(source)
         self._compile_btn.setEnabled(False)
         self._status.setText("Compiling...")
         self._status.setStyleSheet("color: #f0c040; padding: 0 8px;")
         self._worker = _CompileWorker(source)
-        self._worker.finished.connect(self._on_compile_done)
+        self._worker.compile_done.connect(self._on_compile_done)
         self._worker.start()
 
     def _on_compile_done(self, result: str, success: bool) -> None:
+        _log.info("compile done: success=%s", success)
         self._compile_btn.setEnabled(True)
         if success:
             self._status.setText("Done")
             self._status.setStyleSheet("color: #40c040; padding: 0 8px;")
-            self._show_pdf_page(result)
+            _log.info("emitting pdf_ready: %s", result)
+            self.pdf_ready.emit(result)
             self.compile_finished.emit(True)
         else:
             self._status.setText("Failed")
@@ -151,18 +157,6 @@ class LaTeXPanel(QWidget):
             self._error_panel.setVisible(True)
             self._error_btn.setChecked(True)
             self.compile_finished.emit(False)
-
-    def _show_pdf_page(self, pdf_path: str) -> None:
-        try:
-            import fitz
-            doc = fitz.open(pdf_path)
-            page = doc.load_page(0)
-            pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5))
-            img = QImage(pix.samples, pix.width, pix.height,
-                         pix.stride, QImage.Format.Format_RGB888)
-            self._preview_label.setPixmap(QPixmap.fromImage(img))
-        except Exception as exc:
-            _log.warning("PDF preview failed: %s", exc)
 
     def _toggle_errors(self, checked: bool) -> None:
         self._error_panel.setVisible(checked)
