@@ -163,7 +163,19 @@ class LaTeXPanel(QWidget):
         self._error_btn.setText("Errors ▲" if checked else "Errors ▼")
 
     def load_content(self, content: str) -> None:
-        self._editor.setPlainText(content if content.strip() else _DEFAULT_TEX)
+        content = content.strip()
+        if not content:
+            self._editor.setPlainText(_DEFAULT_TEX)
+            return
+        if r"\documentclass" not in content:
+            content = (
+                r"\documentclass{article}" + "\n"
+                r"\usepackage{amsmath,amssymb,amsthm}" + "\n"
+                r"\begin{document}" + "\n"
+                + content + "\n"
+                r"\end{document}" + "\n"
+            )
+        self._editor.setPlainText(content)
 
     def get_content(self) -> str:
         return self._editor.toPlainText()
