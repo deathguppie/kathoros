@@ -309,7 +309,7 @@ class KathorosMainWindow(QMainWindow):
         self._load_objects()
 
     def _on_object_selected(self, object_id: int) -> None:
-        """Left-click: show object content in the Editor panel and track selection."""
+        """Left-click: show object content in the appropriate panel and track selection."""
         if self._pm is None or self._pm.session_service is None:
             return
         obj = self._pm.session_service.get_object(object_id)
@@ -321,17 +321,22 @@ class KathorosMainWindow(QMainWindow):
         ]
         self._selected_objects.insert(0, obj)
         self._selected_objects = self._selected_objects[:5]
-        editor = self._right_panel.findChild(EditorPanel)
-        if editor is None:
-            return
-        editor.load_object(obj)
-        # Switch right panel to Documents tab (index 0), then Editor subtab (index 1)
-        outer = self._right_panel.findChild(QTabWidget)
-        if outer:
-            outer.setCurrentIndex(0)
-        docs = self._right_panel.findChild(DocumentsTabGroup)
-        if docs:
-            docs.setCurrentIndex(1)  # Editor is second tab
+
+        # Switch right panel to Documents tab first
+        outer = self._right_panel._tab_widget
+        outer.setCurrentIndex(0)
+        docs = self._right_panel._docs_tab_group
+
+        latex = (obj.get("latex") or "").strip()
+        if latex:
+            # Object has LaTeX content — open in LaTeX panel
+            self._right_panel._docs_tab_group._latex_panel.load_content(latex)
+            docs.setCurrentIndex(2)  # LaTeX is tab 2
+        else:
+            editor = self._right_panel.findChild(EditorPanel)
+            if editor:
+                editor.load_object(obj)
+            docs.setCurrentIndex(1)  # Editor is tab 1
 
     def _on_object_edit_requested(self, object_id: int) -> None:
         if self._pm is None or self._pm.session_service is None:

@@ -14,8 +14,8 @@ from kathoros.ui.panels.syntax_highlighter import PygmentsHighlighter
 
 _log = logging.getLogger("kathoros.ui.panels.editor_panel")
 
-_LANGUAGES = ["python", "markdown", "latex", "text"]
-_LANG_DISPLAY = ["Python", "Markdown", "LaTeX", "Text"]
+_LANGUAGES = ["python", "markdown", "text"]
+_LANG_DISPLAY = ["Python", "Markdown", "Text"]
 
 
 def _make_toolbar(*widgets) -> QWidget:
@@ -83,20 +83,6 @@ class EditorPanel(QWidget):
         md_l.addWidget(wc_btn)
         md_l.addStretch()
         self._toolbar_stack.addWidget(md_w)
-
-        # LaTeX toolbar
-        lt_w = QWidget()
-        lt_l = QHBoxLayout(lt_w)
-        lt_l.setContentsMargins(2, 2, 2, 2)
-        compile_btn = QPushButton("Compile")
-        lt_l.addWidget(compile_btn)
-        for sym in ["∑", "∫", "α", "β", "γ", "δ", "∂", "∞"]:
-            btn = QPushButton(sym)
-            btn.setFixedWidth(28)
-            btn.clicked.connect(lambda _, s=sym: self._insert_at_cursor(s))
-            lt_l.addWidget(btn)
-        lt_l.addStretch()
-        self._toolbar_stack.addWidget(lt_w)
 
         # Text toolbar
         tx_w = QWidget()
@@ -228,7 +214,7 @@ class EditorPanel(QWidget):
 
     def _detect_language(self, filename: str) -> str:
         ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-        return {"py": "python", "md": "markdown", "tex": "latex"}.get(ext, "text")
+        return {"py": "python", "md": "markdown"}.get(ext, "text")
 
     def _on_language_changed(self, index: int) -> None:
         lang = _LANGUAGES[index]
