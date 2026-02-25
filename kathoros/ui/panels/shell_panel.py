@@ -78,24 +78,33 @@ def _key_to_bytes(event) -> bytes | None:
 
 
 class _TermWidget(QPlainTextEdit):
-    """Output display that forwards every keystroke to the pty."""
-    key_pressed = pyqtSignal(bytes)
+    """Output display that forwards every keystroke to the pty.
 
-    def __init__(self, parent=None) -> None:
-        super().__init__(parent)
-        self.setReadOnly(True)
-        # setReadOnly(True) silently resets focus policy to NoFocus in Qt,
-        # which means the widget can never receive keyboard events.
-        # Restore it explicitly so keyPressEvent fires.
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+    The widget is kept *editable* (not read-only) so Qt delivers keyboard
+    events normally.  To prevent Qt from also inserting characters (which
+    the pty will echo back, causing double-input), we override
+    keyPressEvent and never call super() for terminal keys.  We also block
+    the input-method pipeline to stop iBus/fcitx from inserting text.
+    """
+    key_pressed = pyqtSignal(bytes)
 
     def keyPressEvent(self, event) -> None:
         data = _key_to_bytes(event)
         if data:
             self.key_pressed.emit(data)
+            # Do NOT call super() — prevents Qt from editing the document.
         else:
-            # Pass through non-terminal keys (e.g. Ctrl+C copy)
+            # Ctrl+Shift+C (copy), etc. — let Qt handle these.
             super().keyPressEvent(event)
+
+    def inputMethodEvent(self, event) -> None:
+        """Block input-method commits (iBus/fcitx) — pty handles all input."""
+        text = event.commitString()
+        if text:
+            self.key_pressed.emit(text.encode("utf-8"))
+            event.accept()
+        else:
+            super().inputMethodEvent(event)
 
 
 class ShellPanel(QWidget):
@@ -155,7 +164,7 @@ class ShellPanel(QWidget):
         self._cwd = path
         self._cwd_label.setText(path)
         if self._master_fd is not None:
-            self._send_bytes(f"cd {path}\n".encode())
+            self._send_bytes(f"cd '{path}'\n".encode())
 
     # ── Qt overrides ──────────────────────────────────────────────────────
 
@@ -177,7 +186,7 @@ class ShellPanel(QWidget):
             master_fd, slave_fd = pty.openpty()
         except Exception as exc:
             _log.warning("pty.openpty() failed: %s", exc)
-            self._append(f"[Terminal unavailable: {exc}]\n")
+            self._interpret(f"[Terminal unavailable: {exc}]\n")
             return
 
         env = os.environ.copy()
@@ -198,7 +207,7 @@ class ShellPanel(QWidget):
             _log.warning("failed to start bash: %s", exc)
             os.close(master_fd)
             os.close(slave_fd)
-            self._append(f"[Shell error: {exc}]\n")
+            self._interpret(f"[Shell error: {exc}]\n")
             return
 
         os.close(slave_fd)
@@ -220,15 +229,36 @@ class ShellPanel(QWidget):
                 self._notifier.setEnabled(False)
             return
         text = data.decode("utf-8", errors="replace")
+        # Strip ANSI escape sequences (colours, cursor-movement codes)
         text = _ANSI_RE.sub("", text)
-        text = text.replace("\r\n", "\n").replace("\r", "\n")
-        self._append(text)
+        self._interpret(text)
 
-    def _append(self, text: str) -> None:
-        # Insert via the document cursor — works even when the widget is read-only
-        cursor = self._output.document().rootFrame().lastCursorPosition()
-        cursor.insertText(text)
-        self._output.moveCursor(QTextCursor.MoveOperation.End)
+    def _interpret(self, text: str) -> None:
+        """Interpret basic terminal control characters and write to display."""
+        cursor = self._output.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+
+        for ch in text:
+            if ch == "\r":
+                # Carriage return — move cursor to start of current line
+                cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock)
+            elif ch == "\n":
+                # Newline — move to end then insert newline
+                cursor.movePosition(QTextCursor.MoveOperation.EndOfBlock)
+                cursor.insertText("\n")
+            elif ch == "\b" or ch == "\x7f":
+                # Backspace — delete character before cursor
+                cursor.deletePreviousChar()
+            elif ch == "\x07":
+                # Bell — ignore
+                pass
+            else:
+                # If cursor is not at end of block, overwrite the character
+                if not cursor.atBlockEnd():
+                    cursor.deleteChar()
+                cursor.insertText(ch)
+
+        self._output.setTextCursor(cursor)
         self._output.ensureCursorVisible()
 
     def _send_bytes(self, data: bytes) -> None:

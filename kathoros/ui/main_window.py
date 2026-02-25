@@ -933,6 +933,29 @@ class KathorosMainWindow(QMainWindow):
         except Exception as exc:
             _log.warning("suggest message failed: %s", exc)
 
+    def _git_export_and_commit(self, objects: list[dict], count: int) -> None:
+        """Export objects to git repo and auto-commit."""
+        if self._git_service is None or not objects:
+            return
+        try:
+            if not self._git_service.is_initialized():
+                self._git_service.ensure_repo()
+            self._git_service.export_objects(objects)
+            staged = self._git_service.stage_all()
+            if staged == 0:
+                return
+            names = [o.get("name", "object") for o in objects[:3]]
+            suffix = f" and {count - 3} more" if count > 3 else ""
+            msg = f"Import {count} objects: {', '.join(names)}{suffix}"
+            self._git_service.commit(msg)
+            panel = self.findChild(GitPanel)
+            if panel:
+                panel.load_repo(str(self._pm.project_root / "repo"))
+                panel.update_status(self._git_service.get_status())
+            _log.info("git: exported and committed %d objects", count)
+        except Exception as exc:
+            _log.warning("git export/commit after import failed: %s", exc)
+
     def _build_import_context(self, paths: list) -> str:
         sections = []
         for p in paths:
@@ -1146,6 +1169,9 @@ class KathorosMainWindow(QMainWindow):
         _log.info("wrote %d objects to DB", count)
         self._save_session_snapshot()
         self._load_objects()
+        # Export all committed objects (with DB-assigned IDs) to git
+        all_committed = self._pm.list_committed_objects() if self._pm else []
+        self._git_export_and_commit(all_committed, count)
 
     def _build_snapshot(self) -> dict:
         snap: dict = {"version": 1}

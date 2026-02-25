@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QHeaderView, QAbstractItemView
 )
 from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtGui import QFont, QColor
+from PyQt6.QtGui import QFont
 
 _log = logging.getLogger("kathoros.ui.panels.sqlite_explorer_panel")
 
@@ -22,6 +22,7 @@ class SQLiteExplorerPanel(QWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._connections: dict[str, sqlite3.Connection] = {}
+        self._auto_queried: bool = False
 
         self._db_combo = QComboBox()
         self._db_combo.setStyleSheet("QComboBox { background: #2d2d2d; color: #cccccc; padding: 4px; }")
@@ -68,6 +69,17 @@ class SQLiteExplorerPanel(QWidget):
         layout.addWidget(self._sql_input)
         layout.addWidget(self._table)
         layout.addWidget(self._status)
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        if not self._auto_queried and self._connections:
+            self._auto_queried = True
+            # Default to project DB if available
+            idx = self._db_combo.findText("project")
+            if idx >= 0:
+                self._db_combo.setCurrentIndex(idx)
+            self._sql_input.setPlainText("SELECT * FROM objects LIMIT 50")
+            self.execute_query("SELECT * FROM objects LIMIT 50")
 
     def set_connection(self, name: str, conn: sqlite3.Connection) -> None:
         self._connections[name] = conn
