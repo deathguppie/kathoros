@@ -163,7 +163,7 @@ class LaTeXPanel(QWidget):
         self._error_btn.setText("Errors ▲" if checked else "Errors ▼")
 
     def load_content(self, content: str) -> None:
-        self._editor.setPlainText(content)
+        self._editor.setPlainText(content if content.strip() else _DEFAULT_TEX)
 
     def get_content(self) -> str:
         return self._editor.toPlainText()

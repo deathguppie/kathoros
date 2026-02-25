@@ -328,9 +328,14 @@ class KathorosMainWindow(QMainWindow):
         docs = self._right_panel._docs_tab_group
 
         latex = (obj.get("latex") or "").strip()
-        if latex:
-            # Object has LaTeX content — open in LaTeX panel
-            self._right_panel._docs_tab_group._latex_panel.load_content(latex)
+        source_file = (obj.get("source_file") or "")
+        is_latex = bool(latex) or source_file.lower().endswith(".tex")
+        _log.info("object_selected id=%s latex_len=%d source_file=%s is_latex=%s",
+                  object_id, len(latex), source_file, is_latex)
+
+        if is_latex:
+            content_for_latex = latex or (obj.get("content") or "").strip()
+            self._right_panel._docs_tab_group._latex_panel.load_content(content_for_latex)
             docs.setCurrentIndex(2)  # LaTeX is tab 2
         else:
             editor = self._right_panel.findChild(EditorPanel)
