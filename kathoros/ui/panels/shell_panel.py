@@ -76,8 +76,7 @@ class ShellPanel(QWidget):
         self._container.setStyleSheet("background: #1a1a1a;")
         layout.addWidget(self._container, stretch=1)
 
-        # Delay launch until after the widget is fully shown and mapped
-        QTimer.singleShot(250, self._launch)
+        self._launched = False
 
         # Stop xterm on app quit (child widgets don't get closeEvent)
         from PyQt6.QtWidgets import QApplication
@@ -86,6 +85,12 @@ class ShellPanel(QWidget):
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        if not self._launched:
+            self._launched = True
+            QTimer.singleShot(100, self._launch)
 
     def set_cwd(self, path: str) -> None:
         """Set working directory; restarts xterm in new dir if already running."""
