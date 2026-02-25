@@ -329,12 +329,15 @@ class KathorosMainWindow(QMainWindow):
 
         latex = (obj.get("latex") or "").strip()
         source_file = (obj.get("source_file") or "")
-        is_latex = bool(latex) or source_file.lower().endswith(".tex")
-        _log.info("object_selected id=%s latex_len=%d source_file=%s is_latex=%s",
-                  object_id, len(latex), source_file, is_latex)
+        content_field = (obj.get("content") or "").strip()
+        _latex_markers = (r"\begin{", r"\documentclass", r"\section{", r"\subsection{")
+        content_looks_latex = any(m in content_field for m in _latex_markers)
+        is_latex = bool(latex) or source_file.lower().endswith(".tex") or content_looks_latex
+        _log.info("object_selected id=%s latex_len=%d source_file=%s content_looks_latex=%s is_latex=%s",
+                  object_id, len(latex), source_file, content_looks_latex, is_latex)
 
         if is_latex:
-            content_for_latex = latex or (obj.get("content") or "").strip()
+            content_for_latex = latex or content_field
             self._right_panel._docs_tab_group._latex_panel.load_content(content_for_latex)
             docs.setCurrentIndex(2)  # LaTeX is tab 2
         else:
@@ -416,6 +419,14 @@ class KathorosMainWindow(QMainWindow):
             if reader:
                 reader.load_pdf(path)
                 _switch_docs(0)   # Reader is tab 0
+        elif suffix == ".tex":
+            try:
+                content = Path(path).read_text(encoding="utf-8", errors="replace")
+            except Exception as exc:
+                _log.warning("could not read %s: %s", path, exc)
+                return
+            self._right_panel._docs_tab_group._latex_panel.load_content(content)
+            _switch_docs(2)   # LaTeX is tab 2
         else:
             editor = self.findChild(EditorPanel)
             if editor:
