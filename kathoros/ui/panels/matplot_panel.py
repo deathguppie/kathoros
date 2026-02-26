@@ -77,15 +77,63 @@ class MatPlotPanel(QWidget):
         try:
             import numpy as np
             self._fig.clear()
+            ax = self._fig.add_subplot(111)
+            ax.set_facecolor("#1e1e1e")
+            self._fig.patch.set_facecolor("#1a1a1a")
+
+            # Build a thin plt-like wrapper that draws on our embedded figure
+            _panel_fig = self._fig
+            _panel_ax = ax
+
+            class _PltProxy:
+                """Routes plt.* calls to the embedded figure/axes."""
+                def __getattr__(self, name):
+                    # Axes-level functions: plot, scatter, bar, hist, etc.
+                    if hasattr(_panel_ax, name):
+                        return getattr(_panel_ax, name)
+                    # Figure-level functions
+                    if hasattr(_panel_fig, name):
+                        return getattr(_panel_fig, name)
+                    # Fall back to real plt for things like np imports
+                    return getattr(plt, name)
+                def figure(self, *a, **kw):
+                    return _panel_fig
+                def gcf(self):
+                    return _panel_fig
+                def gca(self):
+                    return _panel_ax
+                def subplot(self, *a, **kw):
+                    return _panel_ax
+                def subplots(self, *a, **kw):
+                    return _panel_fig, _panel_ax
+                def show(self):
+                    pass  # no-op in embedded mode
+                def title(self, *a, **kw):
+                    _panel_ax.set_title(*a, **kw)
+                def xlabel(self, *a, **kw):
+                    _panel_ax.set_xlabel(*a, **kw)
+                def ylabel(self, *a, **kw):
+                    _panel_ax.set_ylabel(*a, **kw)
+                def grid(self, *a, **kw):
+                    _panel_ax.grid(*a, **kw)
+                def legend(self, *a, **kw):
+                    _panel_ax.legend(*a, **kw)
+                def xlim(self, *a, **kw):
+                    _panel_ax.set_xlim(*a, **kw)
+                def ylim(self, *a, **kw):
+                    _panel_ax.set_ylim(*a, **kw)
+                def savefig(self, *a, **kw):
+                    _panel_fig.savefig(*a, **kw)
+                def close(self, *a, **kw):
+                    pass  # no-op
+
             namespace = {
-                "plt": plt,
+                "plt": _PltProxy(),
                 "np": np,
                 "fig": self._fig,
+                "ax": ax,
             }
-            # redirect plt to use our figure
-            plt.figure(self._fig.number if self._fig.number else 1)
             exec(expr, namespace)  # noqa: S102
-            self._canvas.figure = plt.gcf()
             self._canvas.draw()
             self._status.setText("Done")
             self._status.setStyleSheet("color: #40c040; padding: 2px 4px; font-size: 11px;")

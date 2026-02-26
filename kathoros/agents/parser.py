@@ -40,10 +40,8 @@ from kathoros.router.models import ToolRequest
 # ---------------------------------------------------------------------------
 
 # JSON struct: {"tool": "name", "args": {...}}  (top-level only)
-_RE_JSON_STRUCT = re.compile(
-    r'\{[^{}]*"tool"\s*:\s*"([^"]+)"[^{}]*"args"\s*:\s*(\{[^}]*\})[^{}]*\}',
-    re.DOTALL,
-)
+# Only used to locate candidates — actual parsing done with balanced-brace walker
+_RE_JSON_TOOL_KEY = re.compile(r'"tool"\s*:\s*"([^"]+)"')
 
 # XML tag: <tool:toolname>content</tool:toolname>
 _RE_XML_TAG = re.compile(
@@ -59,6 +57,19 @@ _RE_MARKDOWN = re.compile(
 
 # Maximum raw text length the parser will scan (security: avoid ReDoS on huge inputs)
 MAX_PARSE_INPUT_BYTES = 524_288  # 512KB
+
+# Common code-block language tags that should NOT be treated as tool names.
+# Prevents false positives when agents show code examples in markdown.
+_CODE_LANG_BLOCKLIST = frozenset({
+    "python", "py", "javascript", "js", "typescript", "ts", "java", "c",
+    "cpp", "csharp", "cs", "go", "rust", "ruby", "php", "swift", "kotlin",
+    "scala", "r", "sql", "bash", "sh", "zsh", "shell", "powershell",
+    "html", "css", "xml", "yaml", "yml", "toml", "json", "markdown", "md",
+    "text", "txt", "plaintext", "latex", "tex", "lua", "perl", "haskell",
+    "elixir", "erlang", "clojure", "lisp", "scheme", "ocaml", "fsharp",
+    "dart", "zig", "nim", "julia", "matlab", "sage", "diff", "dockerfile",
+    "makefile", "cmake", "ini", "cfg", "conf", "csv", "log",
+})
 
 
 # ---------------------------------------------------------------------------
@@ -192,31 +203,44 @@ class EnvelopeParser:
     ) -> Optional[ParseResult]:
         """
         Priority 2: Structured JSON {"tool": "name", "args": {...}}.
+        Uses balanced-brace extraction to handle nested JSON (arrays of objects, etc.).
         Not enveloped — router enforces envelope requirement by trust level.
         """
-        match = _RE_JSON_STRUCT.search(raw)
+        match = _RE_JSON_TOOL_KEY.search(raw)
         if not match:
             return None
 
-        tool_name = match.group(1)
+        # Walk backwards to find the opening brace of the enclosing object
+        brace_start = raw.rfind("{", 0, match.start())
+        if brace_start == -1:
+            return None
+
+        # Walk forward with balanced braces to find the complete JSON object
+        raw_block = _extract_balanced_json(raw, brace_start)
+        if raw_block is None:
+            return None
+
         try:
-            args = json.loads(match.group(2))
+            parsed = json.loads(raw_block)
         except json.JSONDecodeError:
             return None
 
-        if not isinstance(args, dict):
+        if not isinstance(parsed, dict):
+            return None
+        if "tool" not in parsed or "args" not in parsed:
+            return None
+        if not isinstance(parsed["args"], dict):
             return None
 
-        raw_block = match.group(0)
         request = ToolRequest(
             request_id=str(uuid.uuid4()),
             agent_id=agent_id,
             agent_name=agent_name,
             trust_level=trust_level,
             access_mode=access_mode,
-            tool_name=tool_name,
-            args=args,
-            nonce=nonce,   # inject session nonce for TRUSTED agents
+            tool_name=parsed["tool"],
+            args=parsed["args"],
+            nonce=parsed.get("nonce", nonce),
             enveloped=False,
             detected_via="json_struct",
             run_id=run_id,
@@ -284,6 +308,9 @@ class EnvelopeParser:
             return None
 
         tool_name = match.group(1)
+        # Skip common programming language tags — not tool calls
+        if tool_name.lower() in _CODE_LANG_BLOCKLIST:
+            return None
         content = match.group(2).strip()
         args = _parse_args_from_content(content)
 
@@ -313,6 +340,40 @@ class EnvelopeParser:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _extract_balanced_json(text: str, start: int) -> Optional[str]:
+    """
+    Extract a balanced JSON object from text starting at position `start`.
+    Handles nested braces, brackets, and quoted strings correctly.
+    Returns the substring or None if no balanced object found.
+    """
+    if start >= len(text) or text[start] != "{":
+        return None
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if escape:
+            escape = False
+            continue
+        if ch == "\\":
+            if in_string:
+                escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{" or ch == "[":
+            depth += 1
+        elif ch == "}" or ch == "]":
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1]
+    return None
+
 
 def _parse_args_from_content(content: str) -> dict:
     """
@@ -348,16 +409,38 @@ def _extract_embedded_envelope(text: str) -> tuple[Optional[dict], str]:
 
     # Walk forward to find matching closing brace
     depth = 0
+    in_string = False
+    escape = False
+    last_brace_pos = -1
     for i, ch in enumerate(text[brace_start:], start=brace_start):
+        if escape:
+            escape = False
+            continue
+        if ch == "\\" and in_string:
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
         if ch == "{":
             depth += 1
         elif ch == "}":
             depth -= 1
+            last_brace_pos = i
             if depth == 0:
                 raw_block = text[brace_start:i + 1]
                 payload = parse_envelope(raw_block)
                 if payload is not None:
                     return payload, raw_block
                 break
+
+    # Repair: if braces didn't balance (agent truncated output), try appending missing '}'
+    if depth > 0 and last_brace_pos > brace_start:
+        repaired = text[brace_start:last_brace_pos + 1] + ("}" * depth)
+        payload = parse_envelope(repaired)
+        if payload is not None:
+            return payload, text[brace_start:last_brace_pos + 1]
 
     return None, ""

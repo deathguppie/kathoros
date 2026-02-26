@@ -38,11 +38,72 @@ _EPISTEMIC_BLOCK = """\
 - Flag speculative ontology claims explicitly with a ⚠ marker.
 """
 
+_OBJECT_RULES_BLOCK = """\
+## Object creation and update rules
+When using object_create or object_update tools, you MUST follow these rules strictly.
+
+### Valid field values
+- **type**: concept, definition, derivation, prediction, evidence, open_question, data
+- **status**: NEVER set status directly. Status is managed exclusively by the epistemic audit
+  system. All new objects start as 'pending'.
+
+### Epistemic integrity rules (MANDATORY)
+1. Do NOT create objects with type 'prediction' unless they have explicit depends_on
+   references to validated upstream objects (definitions or derivations).
+2. A 'derivation' MUST list its premises in depends_on — never create a derivation
+   without dependencies.
+3. depends_on graphs must be ACYCLIC. Do not create circular dependencies.
+4. Downstream objects cannot validate upstream ones — validation flows one direction.
+5. An 'evidence' object must reference the prediction or derivation it supports
+   via depends_on.
+6. Speculative claims MUST be flagged in researcher_notes with a warning marker.
+7. Do NOT duplicate existing objects — check context for objects with similar names
+   before creating new ones.
+8. Tags should be lowercase, underscore-separated identifiers (e.g., "quantum_mechanics",
+   "toy_model", "needs_review").
+
+### Field guidelines
+- **name**: Short, descriptive, unique within the session.
+- **description**: 1-3 sentence scientific summary. Be precise.
+- **math_expression**: LaTeX math (no delimiters), e.g., "E = mc^2".
+- **tags**: List of relevant topic tags.
+- **depends_on**: List of object names (exact match) or integer IDs this object depends on.
+- **researcher_notes**: Internal notes, caveats, or uncertainty flags.
+"""
+
 _TOOL_ENVELOPE_HINT = """\
-## Tool use
-Request tools with a JSON envelope (one per response):
-  {{"tool": "<name>", "nonce": "{nonce}", "args": {{...}}}}
-All requests are reviewed by the security router before execution.
+## Tool use — IMPORTANT
+To invoke a tool, you MUST emit a PROXENOS_TOOL_REQUEST JSON envelope in your response.
+Only ONE tool call per response. Do NOT just describe what you would do — emit the JSON.
+
+Your identity for envelopes:
+  agent_id: "{agent_id}"
+  agent_name: "{agent_name}"
+  nonce: "{nonce}"
+
+Envelope format:
+  {{"proxenos_tool_request": {{"nonce": "{nonce}", "agent_id": "{agent_id}", "agent_name": "{agent_name}", "tool": "<tool_name>", "args": {{...}}}}}}
+
+### Examples
+
+Display a graph:
+  {{"proxenos_tool_request": {{"nonce": "{nonce}", "agent_id": "{agent_id}", "agent_name": "{agent_name}", "tool": "graph_update", "args": {{"nodes": [{{"id": "A", "label": "Node A"}}, {{"id": "B", "label": "Node B"}}], "edges": [{{"source": "A", "target": "B"}}], "clear": true}}}}}}
+
+Create objects:
+  {{"proxenos_tool_request": {{"nonce": "{nonce}", "agent_id": "{agent_id}", "agent_name": "{agent_name}", "tool": "object_create", "args": {{"objects": [{{"name": "Newton second law", "type": "definition", "description": "F = ma", "tags": ["classical_mechanics"]}}]}}}}}}
+
+Update an object:
+  {{"proxenos_tool_request": {{"nonce": "{nonce}", "agent_id": "{agent_id}", "agent_name": "{agent_name}", "tool": "object_update", "args": {{"object_id": 5, "fields": {{"tags": ["updated_tag"]}}}}}}}}
+
+Evaluate SageMath:
+  {{"proxenos_tool_request": {{"nonce": "{nonce}", "agent_id": "{agent_id}", "agent_name": "{agent_name}", "tool": "sagemath_eval", "args": {{"code": "print(factor(x^2 - 1))"}}}}}}
+
+Render a matplotlib plot:
+  {{"proxenos_tool_request": {{"nonce": "{nonce}", "agent_id": "{agent_id}", "agent_name": "{agent_name}", "tool": "matplot_render", "args": {{"code": "import numpy as np\\nx = np.linspace(0, 2*np.pi, 100)\\nplt.plot(x, np.sin(x))\\nplt.title('sin(x)')"}}}}}}
+
+Execute SQL on the database:
+  {{"proxenos_tool_request": {{"nonce": "{nonce}", "agent_id": "{agent_id}", "agent_name": "{agent_name}", "tool": "db_execute", "args": {{"sql": "CREATE TABLE test (id INTEGER PRIMARY KEY, content TEXT)", "db": "project"}}}}}}
+  {{"proxenos_tool_request": {{"nonce": "{nonce}", "agent_id": "{agent_id}", "agent_name": "{agent_name}", "tool": "db_execute", "args": {{"sql": "INSERT INTO test (content) VALUES ('hello world')", "db": "project"}}}}}}
 """
 
 _IMPORT_PROMPT = """\
@@ -116,10 +177,18 @@ def build_system_prompt(context: dict) -> str:
     if tool_desc:
         parts.append(f"## Available tools\n{tool_desc}")
 
+    # Object creation/update rules (only when tools are available)
+    if tool_desc:
+        parts.append(_OBJECT_RULES_BLOCK)
+
     # Tool envelope hint (only when tools are available)
     nonce = context.get("session_nonce") or ""
+    agent_id = str(context.get("agent_id") or "")
+    agent_name = context.get("agent_name") or ""
     if tool_desc and nonce:
-        parts.append(_TOOL_ENVELOPE_HINT.format(nonce=nonce))
+        parts.append(_TOOL_ENVELOPE_HINT.format(
+            nonce=nonce, agent_id=agent_id, agent_name=agent_name,
+        ))
 
     return "\n\n".join(parts)
 

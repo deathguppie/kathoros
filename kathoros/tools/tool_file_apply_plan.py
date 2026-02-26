@@ -30,7 +30,6 @@ FILE_APPLY_PLAN_TOOL = ToolDefinition(
     max_output_size=10_485_760,
     aliases=("apply_plan",),
     output_target="context",
-    is_active=True,
     args_schema={
         "type": "object",
         "additionalProperties": False,

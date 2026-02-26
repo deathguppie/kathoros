@@ -43,11 +43,15 @@ class SQLiteExplorerPanel(QWidget):
         clear_btn = QPushButton("Clear")
         clear_btn.clicked.connect(self.clear)
 
+        spread_btn = QPushButton("Spreadsheet")
+        spread_btn.clicked.connect(self._on_spreadsheet)
+
         toolbar = QHBoxLayout()
         toolbar.addWidget(self._db_combo)
         toolbar.addStretch()
         toolbar.addWidget(run_btn)
         toolbar.addWidget(clear_btn)
+        toolbar.addWidget(spread_btn)
 
         self._table = QTableWidget()
         self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -130,6 +134,15 @@ class SQLiteExplorerPanel(QWidget):
 
     def _is_safe_query(self, sql: str) -> bool:
         return sql.strip().lower().startswith("select")
+
+    def _on_spreadsheet(self) -> None:
+        from kathoros.ui.dialogs.sqlite_spreadsheet_dialog import SQLiteSpreadsheetDialog
+        dlg = SQLiteSpreadsheetDialog(self._connections, self)
+        dlg.exec()
+        # Refresh current query after dialog closes
+        sql = self._sql_input.toPlainText().strip()
+        if sql:
+            self.execute_query(sql)
 
     def _on_run(self) -> None:
         sql = self._sql_input.toPlainText().strip()

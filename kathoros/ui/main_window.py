@@ -786,6 +786,8 @@ class KathorosMainWindow(QMainWindow):
                 "enforce_epistemic": True,
                 "session_nonce":     nonce,
                 "tool_descriptions": tool_desc,
+                "agent_id":          agent_id,
+                "agent_name":        agent.get("name", "") if agent else "",
             }
         self._dispatcher.dispatch(
             message=text,
@@ -1110,6 +1112,21 @@ class KathorosMainWindow(QMainWindow):
 
         if result.decision == Decision.APPROVED:
             _log.info("tool executed: %s", tool_name)
+            # Apply tool-specific side effects
+            if tool_name == "graph_update" and isinstance(result.output, dict):
+                self._apply_graph_update(result.output)
+            elif tool_name == "object_create" and isinstance(result.output, dict):
+                self._apply_object_create(result.output)
+            elif tool_name == "object_update" and isinstance(result.output, dict):
+                self._apply_object_update(result.output)
+            elif tool_name == "sagemath_eval" and isinstance(result.output, dict):
+                self._apply_sagemath_eval(result.output)
+            elif tool_name == "matplot_render" and isinstance(result.output, dict):
+                self._apply_matplot_render(result.output)
+            elif tool_name == "db_execute" and isinstance(result.output, dict):
+                db_result = self._apply_db_execute(result.output)
+                if db_result is not None:
+                    result.output = db_result
             self._ai_output_panel.append_text(
                 f"[tool result] {tool_name}: {result.output}", role="system"
             )
@@ -1119,6 +1136,121 @@ class KathorosMainWindow(QMainWindow):
                 f"[tool rejected] {tool_name}: {'; '.join(result.validation_errors)}",
                 role="system",
             )
+
+    def _apply_graph_update(self, data: dict) -> None:
+        """Apply graph_update tool output to the Graph panel."""
+        try:
+            graph_panel = self._right_panel._math_tab_group._graph_panel
+            if data.get("clear", False):
+                graph_panel.clear()
+            for node in data.get("nodes", []):
+                graph_panel.add_node(node["id"], label=node.get("label", node["id"]))
+            for edge in data.get("edges", []):
+                graph_panel.add_edge(edge["source"], edge["target"])
+            # Switch to the Mathematics tab group and Graph tab
+            outer = self._right_panel._tab_widget
+            math_group = self._right_panel._math_tab_group
+            outer.setCurrentWidget(math_group)
+            math_group.setCurrentWidget(graph_panel)
+        except Exception as exc:
+            _log.warning("graph_update render failed: %s", exc)
+
+    def _apply_object_create(self, data: dict) -> None:
+        """Insert objects via SessionService after object_create tool approval."""
+        if not self._pm or not self._pm.session_service:
+            _log.warning("object_create: no active session")
+            return
+        try:
+            objects = data.get("objects", [])
+            count = self._pm.session_service.insert_objects(objects)
+            _log.info("object_create: inserted %d objects", count)
+            self._load_objects()
+        except Exception as exc:
+            _log.warning("object_create failed: %s", exc)
+
+    def _apply_object_update(self, data: dict) -> None:
+        """Update an object via SessionService after object_update tool approval."""
+        if not self._pm or not self._pm.session_service:
+            _log.warning("object_update: no active session")
+            return
+        try:
+            object_id = data["object_id"]
+            fields = data.get("fields", {})
+            result = self._pm.session_service.update_object(object_id, **fields)
+            _log.info("object_update: id=%d result=%s", object_id, result)
+            self._load_objects()
+        except Exception as exc:
+            _log.warning("object_update failed: %s", exc)
+
+    def _apply_sagemath_eval(self, data: dict) -> None:
+        """Run SageMath code via the SageMath panel."""
+        try:
+            sage_panel = self._right_panel._math_tab_group._sagematch_panel
+            code = data.get("code", "")
+            if code:
+                sage_panel.evaluate(code)
+                # Switch to Mathematics → SageMath tab
+                outer = self._right_panel._tab_widget
+                math_group = self._right_panel._math_tab_group
+                outer.setCurrentWidget(math_group)
+                math_group.setCurrentWidget(sage_panel)
+        except Exception as exc:
+            _log.warning("sagemath_eval render failed: %s", exc)
+
+    def _apply_matplot_render(self, data: dict) -> None:
+        """Run matplotlib code via the MatPlot panel."""
+        try:
+            matplot_panel = self._right_panel._math_tab_group._matplot_panel
+            code = data.get("code", "")
+            if code:
+                matplot_panel.run_code(code)
+                # Switch to Mathematics → MatPlot tab
+                outer = self._right_panel._tab_widget
+                math_group = self._right_panel._math_tab_group
+                outer.setCurrentWidget(math_group)
+                math_group.setCurrentWidget(matplot_panel)
+        except Exception as exc:
+            _log.warning("matplot_render render failed: %s", exc)
+
+    def _apply_db_execute(self, data: dict) -> dict | None:
+        """Execute SQL against the project or global SQLite database."""
+        if "error" in data:
+            return data  # pass through validation error from executor
+        if not self._pm:
+            return {"error": "No project open."}
+        sql = data.get("sql", "")
+        db_name = data.get("db", "project")
+        conn = None
+        if db_name == "project" and self._pm._project_conn:
+            conn = self._pm._project_conn
+        elif db_name == "global" and self._pm._global_conn:
+            conn = self._pm._global_conn
+        if not conn:
+            return {"error": f"Database '{db_name}' not available."}
+        try:
+            import sqlite3
+            first_word = sql.strip().split()[0].lower() if sql.strip() else ""
+            if first_word in ("select", "pragma"):
+                # Single-statement query that returns rows
+                cursor = conn.execute(sql)
+                rows = cursor.fetchall()
+                cols = [d[0] for d in cursor.description] if cursor.description else []
+                return {
+                    "columns": cols,
+                    "rows": [list(r) for r in rows[:200]],
+                    "row_count": len(rows),
+                    "truncated": len(rows) > 200,
+                }
+            else:
+                # Use executescript for write operations — handles multiple statements
+                conn.executescript(sql)
+                return {
+                    "ok": True,
+                    "statement": first_word.upper(),
+                }
+        except sqlite3.Error as exc:
+            _log.warning("db_execute failed: %s", exc)
+            return {"error": str(exc)}
 
     def _on_agent_done(self) -> None:
         _log.info("agent done import_mode=%s", self._import_mode)
