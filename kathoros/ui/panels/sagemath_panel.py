@@ -5,12 +5,10 @@ No DB calls.
 """
 import logging
 import subprocess
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPlainTextEdit, QPushButton
-)
-from PyQt6.QtCore import pyqtSignal, QThread, Qt
-from PyQt6.QtGui import QFont, QColor, QTextCharFormat, QTextCursor
+
+from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtGui import QColor, QFont, QTextCharFormat, QTextCursor
+from PyQt6.QtWidgets import QHBoxLayout, QLabel, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget
 
 _log = logging.getLogger("kathoros.ui.panels.sagemath_panel")
 

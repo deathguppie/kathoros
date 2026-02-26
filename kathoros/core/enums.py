@@ -3,7 +3,7 @@
 Canonical enums for the entire system.
 All enum values must match SECURITY_CONSTRAINTS.md exactly.
 """
-from enum import Enum, auto
+from enum import Enum
 
 
 class AccessMode(str, Enum):

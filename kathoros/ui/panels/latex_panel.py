@@ -4,15 +4,14 @@ On success emits pdf_ready(path) so the main window can open the PDF in the read
 No DB calls.
 """
 import logging
+import os
 import subprocess
 import tempfile
-import os
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout,
-    QPlainTextEdit, QPushButton, QLabel
-)
-from PyQt6.QtCore import pyqtSignal, QThread
+
+from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtGui import QFont, QKeySequence, QShortcut
+from PyQt6.QtWidgets import QHBoxLayout, QLabel, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget
+
 from kathoros.ui.panels.syntax_highlighter import PygmentsHighlighter
 
 _log = logging.getLogger("kathoros.ui.panels.latex_panel")

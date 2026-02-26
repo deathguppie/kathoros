@@ -15,8 +15,9 @@ Security notes:
 - API keys are never stored here.
 """
 from __future__ import annotations
-import sqlite3
+
 import logging
+import sqlite3
 
 _log = logging.getLogger("kathoros.db.migrations")
 

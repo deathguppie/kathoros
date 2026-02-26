@@ -5,6 +5,7 @@ API key loaded from KeyStore at runtime only.
 """
 import logging
 from typing import Callable
+
 from kathoros.config.key_store import load_key
 
 _log = logging.getLogger("kathoros.agents.backends.anthropic_backend")

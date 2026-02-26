@@ -19,7 +19,6 @@ from __future__ import annotations
 import logging
 import sqlite3
 from pathlib import Path
-from typing import Optional
 
 from kathoros.db.migrations import (
     GLOBAL_MIGRATIONS,

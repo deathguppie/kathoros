@@ -4,12 +4,18 @@ No DB calls. No API calls. Emits signals only.
 Parent wires message_submitted to agent dispatch layer.
 """
 import logging
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QComboBox, QPlainTextEdit, QPushButton
-)
-from PyQt6.QtCore import pyqtSignal, Qt
+
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QKeyEvent
+from PyQt6.QtWidgets import (
+    QComboBox,
+    QHBoxLayout,
+    QLabel,
+    QPlainTextEdit,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 _log = logging.getLogger("kathoros.ui.panels.ai_input_panel")
 

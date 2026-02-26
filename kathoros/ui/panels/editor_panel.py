@@ -3,13 +3,21 @@ EditorPanel — code/text editor with language selector and context toolbars.
 Pygments syntax highlighting. No DB calls.
 """
 import logging
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QComboBox, QStackedWidget, QPlainTextEdit,
-    QPushButton, QLineEdit, QSizePolicy
-)
-from PyQt6.QtCore import pyqtSignal, Qt
+
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QFont, QTextCursor
+from PyQt6.QtWidgets import (
+    QComboBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPlainTextEdit,
+    QPushButton,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
+)
+
 from kathoros.ui.panels.syntax_highlighter import PygmentsHighlighter
 
 _log = logging.getLogger("kathoros.ui.panels.editor_panel")

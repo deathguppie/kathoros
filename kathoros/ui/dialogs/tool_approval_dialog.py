@@ -6,12 +6,17 @@ Approve / Deny buttons. Never executes tools — only returns decision.
 """
 import json
 import logging
+
+from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QPlainTextEdit, QFrame
+    QDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QPlainTextEdit,
+    QPushButton,
+    QVBoxLayout,
 )
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont, QColor
 
 _log = logging.getLogger("kathoros.ui.dialogs.tool_approval_dialog")
 

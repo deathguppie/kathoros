@@ -9,7 +9,6 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Optional
 
 _log = logging.getLogger("kathoros.services.git_service")
 
@@ -46,7 +45,7 @@ class GitService:
         _log.info("git repo initialized at %s", self._repo_path)
 
     def _get_repo(self):
-        from git import Repo, InvalidGitRepositoryError
+        from git import InvalidGitRepositoryError, Repo
         try:
             return Repo(str(self._repo_path))
         except InvalidGitRepositoryError:

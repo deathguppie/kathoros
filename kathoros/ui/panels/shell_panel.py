@@ -17,11 +17,16 @@ import struct
 import subprocess
 import termios
 
-from PyQt6.QtCore import Qt, QSocketNotifier, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QSocketNotifier, Qt, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QFont, QTextCursor
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QPlainTextEdit, QApplication,
+    QApplication,
+    QHBoxLayout,
+    QLabel,
+    QPlainTextEdit,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
 )
 
 _log = logging.getLogger("kathoros.ui.panels.shell_panel")

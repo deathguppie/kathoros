@@ -4,12 +4,10 @@ Read-only. Content appended via append_text() and append_tool_request().
 No DB calls.
 """
 import logging
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPlainTextEdit, QPushButton
-)
+
 from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtGui import QFont, QColor, QTextCharFormat, QTextCursor
+from PyQt6.QtGui import QColor, QFont, QTextCharFormat, QTextCursor
+from PyQt6.QtWidgets import QHBoxLayout, QLabel, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget
 
 _log = logging.getLogger("kathoros.ui.panels.ai_output_panel")
 

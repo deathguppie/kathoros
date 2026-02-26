@@ -4,16 +4,15 @@ Displays causal graphs, concept networks, dependency graphs.
 No DB calls. Load via load_graph() or build via add_node/add_edge.
 """
 import logging
+
 import matplotlib
+
 matplotlib.use("QtAgg")
-from matplotlib.figure import Figure
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 import networkx as nx
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QComboBox, QPushButton
-)
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
 from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 _log = logging.getLogger("kathoros.ui.panels.graph_panel")
 

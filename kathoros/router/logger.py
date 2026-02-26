@@ -7,11 +7,12 @@ raw_args_hash must always be exactly 64 characters.
 Append-only: one record per request, written after pipeline completes.
 """
 from __future__ import annotations
+
 import json
 import logging
-import time
-from kathoros.router.models import RouterResult
+
 from kathoros.core.constants import RAW_ARGS_HASH_LENGTH
+from kathoros.router.models import RouterResult
 
 # Module-level logger — output destination configured by app startup
 _log = logging.getLogger("kathoros.router.audit")

@@ -5,13 +5,22 @@ No DB calls — content loaded via show_text() or show_table().
 """
 import logging
 from datetime import datetime
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QPlainTextEdit, QTableWidget, QTableWidgetItem, QStackedWidget,
-    QApplication, QHeaderView
-)
+
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QFont
+from PyQt6.QtWidgets import (
+    QApplication,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QPlainTextEdit,
+    QPushButton,
+    QStackedWidget,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
 _log = logging.getLogger("kathoros.ui.panels.results_panel")
 

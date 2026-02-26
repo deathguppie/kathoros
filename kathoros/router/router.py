@@ -27,7 +27,6 @@ from __future__ import annotations
 import json
 import re
 import time
-import uuid
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -35,7 +34,6 @@ from kathoros.core.constants import (
     ARTIFACTS_DIR,
     OVERSIZED_DIR,
     RUN_ID_PATTERN,
-    RAW_ARGS_HASH_LENGTH,
 )
 from kathoros.core.enums import AccessMode, Decision, TrustLevel
 from kathoros.core.exceptions import (

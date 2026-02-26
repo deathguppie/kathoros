@@ -4,12 +4,14 @@ UI must never import db.queries directly.
 No router calls (INV-1). No approval logic (INV-15).
 """
 from __future__ import annotations
+
 import logging
-import sqlite3
 import secrets
+import sqlite3
 from typing import Optional
+
 from kathoros.db import queries
-from kathoros.epistemic.checker import CheckResult, Edge, EpistemicChecker, ObjectNode
+from kathoros.epistemic.checker import CheckResult, EpistemicChecker, ObjectNode
 
 _log = logging.getLogger("kathoros.services.session_service")
 
@@ -127,6 +129,7 @@ class SessionService:
 
     def save_snapshot(self, snapshot: dict) -> None:
         import json
+
         from kathoros.core.constants import MAX_SNAPSHOT_SIZE_BYTES
         data = json.dumps(snapshot, separators=(",", ":"))
         if len(data.encode("utf-8")) > MAX_SNAPSHOT_SIZE_BYTES:
@@ -151,6 +154,7 @@ class SessionService:
 
     def insert_objects(self, objects: list[dict]) -> int:
         import logging
+
         from kathoros.agents.import_parser import detect_batch_cycles
         _log = logging.getLogger("kathoros.services.session_service")
         count = 0

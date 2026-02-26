@@ -5,10 +5,12 @@ Scans completed response for tool requests via EnvelopeParser.
 No DB imports. No approval logic.
 """
 import logging
+
 from PyQt6.QtCore import QThread, pyqtSignal
+
 from kathoros.agents.backends.ollama_backend import OllamaBackend
 from kathoros.agents.parser import EnvelopeParser
-from kathoros.core.enums import TrustLevel, AccessMode
+from kathoros.core.enums import AccessMode, TrustLevel
 
 _log = logging.getLogger("kathoros.agents.worker")
 
@@ -16,7 +18,7 @@ _log = logging.getLogger("kathoros.agents.worker")
 class AgentWorker(QThread):
     chunk_ready = pyqtSignal(str)
     tool_request_detected = pyqtSignal(dict)
-    finished = pyqtSignal()
+    response_done = pyqtSignal()
     error = pyqtSignal(str)
 
     def __init__(
@@ -62,6 +64,8 @@ class AgentWorker(QThread):
         self.chunk_ready.emit(chunk)
 
     def _on_done(self) -> None:
+        if self._stop:
+            return
         result = self._parser.parse(
             self._buffer,
             agent_id=self._agent_id,
@@ -79,8 +83,10 @@ class AgentWorker(QThread):
                 "raw_block": result.raw_block,
                 "enveloped": req.enveloped,
             })
-        self.finished.emit()
+        self.response_done.emit()
 
     def _on_error(self, msg: str) -> None:
+        if self._stop:
+            return
         _log.warning("agent worker error: %s", msg)
         self.error.emit(msg)

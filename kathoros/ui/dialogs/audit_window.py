@@ -4,14 +4,25 @@ Linear mode only. Researcher-driven conflict recording.
 No tool execution. No router calls. No direct DB access (uses SessionService only).
 """
 from __future__ import annotations
+
 import logging
+
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QCheckBox,
-    QPushButton, QTabWidget, QPlainTextEdit, QListWidget,
-    QListWidgetItem, QInputDialog, QWidget, QSizePolicy,
+    QCheckBox,
+    QDialog,
     QFrame,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
+    QPlainTextEdit,
+    QPushButton,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
 )
-from PyQt6.QtCore import Qt
+
 from kathoros.agents.dispatcher import AgentDispatcher
 from kathoros.agents.prompts import AUDIT_SYSTEM_PROMPT
 
@@ -359,8 +370,18 @@ class AuditWindow(QDialog):
             self._session_service.commit_object(obj_id)
         self.accept()
 
+    def reject(self) -> None:
+        """Stop all dispatchers before closing to prevent callbacks on dead widgets."""
+        for d in self._dispatchers:
+            d.stop()
+        self._dispatchers.clear()
+        super().reject()
+
     def _finalize_audit(self, decision) -> None:
         if self._audit_session_id is None:
             return
+        for d in self._dispatchers:
+            d.stop()
+        self._dispatchers.clear()
         notes = self._notes_edit.toPlainText().strip()
         self._session_service.complete_audit(self._audit_session_id, decision, notes)

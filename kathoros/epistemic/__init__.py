@@ -2,7 +2,10 @@
 # Enforces: premise gate, TOY_MODEL labeling, cycle detection,
 # ontology prediction ban, framework linkage, validation scope.
 from kathoros.epistemic.checker import (
-    EpistemicChecker, CheckResult, Violation, Severity,
+    CheckResult,
+    EpistemicChecker,
+    Severity,
+    Violation,
 )
 
 __all__ = ["EpistemicChecker", "CheckResult", "Violation", "Severity"]

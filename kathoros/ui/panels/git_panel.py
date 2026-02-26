@@ -3,12 +3,20 @@ GitPanel — git log viewer + stage/commit workflow for current project repo.
 No DB calls. Signals to main window for all actions.
 """
 import logging
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
-    QLabel, QPushButton, QLineEdit, QMessageBox
-)
+
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QFont
+from PyQt6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 _log = logging.getLogger("kathoros.ui.panels.git_panel")
 
@@ -163,7 +171,7 @@ class GitPanel(QWidget):
         if not self._repo_path:
             return
         try:
-            from git import Repo, InvalidGitRepositoryError
+            from git import Repo
             repo = Repo(self._repo_path)
             try:
                 self._branch_label.setText(f"Branch: {repo.active_branch.name}")

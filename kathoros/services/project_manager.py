@@ -4,16 +4,18 @@ Single instance per application run.
 UI never touches DB connections directly — always through ProjectManager.
 """
 from __future__ import annotations
+
 import logging
 import shutil
 import sqlite3
 from pathlib import Path
 from typing import Optional
+
 from kathoros.core.constants import GLOBAL_DB_NAME, PROJECT_DB_NAME
-from kathoros.db.connection import open_global_db, open_project_db, open_project_db_readonly
 from kathoros.db import queries
-from kathoros.services.session_service import SessionService
+from kathoros.db.connection import open_global_db, open_project_db, open_project_db_readonly
 from kathoros.services.global_service import GlobalService
+from kathoros.services.session_service import SessionService
 
 _log = logging.getLogger("kathoros.services.project_manager")
 
@@ -234,6 +236,13 @@ class ProjectManager:
         from kathoros.db import queries as _q
         rows = _q.list_notes(self._project_conn)
         return [dict(r) for r in rows]
+
+    def get_note(self, note_id: int) -> dict | None:
+        if self._project_conn is None:
+            return None
+        from kathoros.db import queries as _q
+        row = _q.get_note(self._project_conn, note_id)
+        return dict(row) if row else None
 
     def create_note(self, title: str = "Untitled", content: str = "", fmt: str = "markdown") -> dict:
         from kathoros.db import queries as _q

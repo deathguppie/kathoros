@@ -6,12 +6,21 @@ No DB access here — all persistence via signals to main_window handlers.
 from __future__ import annotations
 
 import logging
+
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QWidget, QSplitter, QVBoxLayout, QHBoxLayout,
-    QListWidget, QListWidgetItem, QPlainTextEdit,
-    QLineEdit, QComboBox, QPushButton, QLabel,
+    QComboBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QPlainTextEdit,
+    QPushButton,
+    QSplitter,
+    QVBoxLayout,
+    QWidget,
 )
 
 _log = logging.getLogger("kathoros.ui.panels.notes_panel")
@@ -27,6 +36,7 @@ class NotesPanel(QWidget):
     note_create_requested = pyqtSignal()
     note_delete_requested = pyqtSignal(list)               # list[int] note ids
     note_save_requested   = pyqtSignal(int, str, str, str) # id, title, content, format
+    note_selected         = pyqtSignal(int)                 # note id to load
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -197,6 +207,7 @@ class NotesPanel(QWidget):
         # However, we also need to populate the editor immediately from the list item.
         # Since we don't have content here, we signal save of previous and update id.
         self._current_note_id = note_id
+        self.note_selected.emit(note_id)
 
     def _emit_save(self) -> None:
         if self._current_note_id is None:

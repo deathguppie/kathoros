@@ -4,15 +4,13 @@ Read-only — no writes, no approval needed, no run_id needed.
 Executor must not contain approval logic (INV-15).
 Executor must not call the router (INV-1).
 """
+import hashlib
+import mimetypes
 from pathlib import Path
+
+from kathoros.core.exceptions import AbsolutePathError, TraversalError
 from kathoros.router.models import ToolDefinition
 from kathoros.utils.paths import resolve_safe_path
-from kathoros.core.exceptions import AbsolutePathError, TraversalError
-import hashlib
-import json
-import mimetypes
-import logging
-from datetime import datetime
 
 FILE_ANALYZE_TOOL = ToolDefinition(
     name="file_analyze",
@@ -102,9 +100,11 @@ def execute_file_analyze(
         }
 
         if "sha256" in args.get("extract", []):
+            sha = hashlib.sha256()
             with open(file_path, "rb") as f:
-                sha256_hash = hashlib.sha256(f.read()).hexdigest()
-                metadata["sha256"] = sha256_hash
+                for chunk in iter(lambda: f.read(65536), b""):
+                    sha.update(chunk)
+            metadata["sha256"] = sha.hexdigest()
 
         if "mime_type" in args.get("extract", []):
             mime_type, _ = mimetypes.guess_type(file_path)

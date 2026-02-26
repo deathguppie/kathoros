@@ -9,7 +9,7 @@ No preamble, no explanation — only valid JSON.
 Each object in the array must have:
 {
   "name": "short descriptive name",
-  "type": "concept|definition|derivation|prediction|evidence|question",
+  "type": "concept|definition|derivation|prediction|evidence|open_question|data",
   "description": "1-3 sentence summary",
   "tags": ["tag1", "tag2"],
   "math_expression": "optional LaTeX expression or empty string",

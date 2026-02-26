@@ -5,6 +5,7 @@ Tool requests are intercepted upstream by the parser.
 """
 import logging
 from typing import Callable
+
 import ollama
 
 _log = logging.getLogger("kathoros.agents.backends.ollama_backend")

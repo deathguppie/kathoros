@@ -4,11 +4,10 @@ No DB calls — receives data via load_interactions().
 UI must not import db.queries directly.
 """
 import logging
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QListWidget, QListWidgetItem, QPushButton, QLabel
-)
-from PyQt6.QtCore import pyqtSignal, Qt
+
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFont
+from PyQt6.QtWidgets import QLabel, QListWidget, QListWidgetItem, QPushButton, QVBoxLayout, QWidget
 
 _log = logging.getLogger("kathoros.ui.panels.audit_log_panel")
 

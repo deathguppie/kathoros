@@ -7,16 +7,23 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Optional
 
-from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
-    QLabel, QLineEdit, QComboBox, QPlainTextEdit,
-    QTabWidget, QWidget, QPushButton, QDialogButtonBox,
-    QSizePolicy, QMessageBox,
-)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
+from PyQt6.QtWidgets import (
+    QComboBox,
+    QDialog,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPlainTextEdit,
+    QPushButton,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
 _log = logging.getLogger("kathoros.ui.dialogs.object_detail_dialog")
 

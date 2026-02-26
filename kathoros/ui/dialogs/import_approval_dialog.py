@@ -4,12 +4,21 @@ Researcher can approve, edit, or reject each suggested object.
 Approved objects returned for DB write. No DB calls here.
 """
 import logging
+
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QScrollArea, QWidget, QLineEdit,
-    QComboBox, QCheckBox, QFrame, QPlainTextEdit
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPlainTextEdit,
+    QPushButton,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
 )
-from PyQt6.QtCore import Qt
 
 _log = logging.getLogger("kathoros.ui.dialogs.import_approval_dialog")
 

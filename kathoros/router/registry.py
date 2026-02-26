@@ -6,8 +6,9 @@ Aliases are supported but resolve to the canonical ToolDefinition.
 No fuzzy matching. No fallback. Unknown tool = hard error.
 """
 from __future__ import annotations
-from kathoros.router.models import ToolDefinition
+
 from kathoros.core.exceptions import UnknownToolError
+from kathoros.router.models import ToolDefinition
 
 
 class ToolRegistry:

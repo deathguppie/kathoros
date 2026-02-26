@@ -5,6 +5,7 @@ All path resolution must go through resolve_safe_path().
 Never use startswith() for path containment checks.
 """
 from pathlib import Path
+
 from kathoros.core.exceptions import AbsolutePathError, TraversalError
 
 

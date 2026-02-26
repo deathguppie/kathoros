@@ -3,14 +3,14 @@ ToolService — instantiates and manages the ToolRouter for a session.
 Single entry point for tool execution from the UI layer.
 Wires registry, executors, and approval callback together.
 """
-import json
 import logging
 import uuid
 from pathlib import Path
+
+from kathoros.core.enums import AccessMode, TrustLevel
+from kathoros.router.models import RouterResult, ToolRequest
 from kathoros.router.registry import ToolRegistry
 from kathoros.router.router import ToolRouter
-from kathoros.router.models import ToolRequest, RouterResult
-from kathoros.core.enums import AccessMode, TrustLevel
 from kathoros.tools.tool_db_execute import DB_EXECUTE_TOOL, execute_db_execute
 from kathoros.tools.tool_file_analyze import FILE_ANALYZE_TOOL, execute_file_analyze
 from kathoros.tools.tool_file_apply_plan import FILE_APPLY_PLAN_TOOL, execute_file_apply_plan

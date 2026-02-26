@@ -12,8 +12,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from typing import Any, Optional
-
+from typing import Optional
 
 # ---------------------------------------------------------------------------
 # global.db — agents
@@ -458,18 +457,25 @@ def list_agents(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     ).fetchall()
 
 
+_AGENT_EDITABLE = {
+    "name", "alias", "type", "provider", "endpoint", "model_string",
+    "capability_tags", "cost_tier", "context_window",
+    "default_research_prompt", "default_audit_prompt",
+    "trust_level", "require_tool_approval", "require_write_approval",
+    "user_notes", "is_active",
+}
+
+
 def update_agent(conn: sqlite3.Connection, agent_id: int, **fields) -> None:
-    if not fields:
+    safe = {k: v for k, v in fields.items() if k in _AGENT_EDITABLE}
+    if not safe:
         return
-    fields["updated_at"] = "strftime('%Y-%m-%dT%H:%M:%SZ','now')"
-    set_clause = ", ".join(
-        f"{k} = strftime('%Y-%m-%dT%H:%M:%SZ','now')" if k == "updated_at"
-        else f"{k} = ?"
-        for k in fields
+    set_parts = [f"{k} = ?" for k in safe]
+    set_parts.append("updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')")
+    values = list(safe.values()) + [agent_id]
+    conn.execute(
+        f"UPDATE agents SET {', '.join(set_parts)} WHERE id = ?", values
     )
-    values = [v for k, v in fields.items() if k != "updated_at"]
-    values.append(agent_id)
-    conn.execute(f"UPDATE agents SET {set_clause} WHERE id = ?", values)
     conn.commit()
 
 
@@ -595,12 +601,13 @@ def get_note(conn: sqlite3.Connection, note_id: int) -> Optional[sqlite3.Row]:
 
 
 def insert_note(conn: sqlite3.Connection, title: str, content: str, fmt: str) -> int:
-    conn.execute(
+    cursor = conn.execute(
         "INSERT INTO notes (title, content, format) VALUES (?, ?, ?)",
         (title, content, fmt),
     )
+    row_id = cursor.lastrowid
     conn.commit()
-    return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    return row_id
 
 
 def update_note(conn: sqlite3.Connection, note_id: int, title: str, content: str, fmt: str) -> None:

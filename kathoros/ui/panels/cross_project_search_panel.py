@@ -5,13 +5,22 @@ Search runs in a QThread worker so the UI stays responsive.
 PM is injected via set_project_manager() after construction.
 """
 import logging
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QComboBox,
-    QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
-    QLabel, QAbstractItemView,
-)
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
+
+from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtGui import QFont
+from PyQt6.QtWidgets import (
+    QAbstractItemView,
+    QComboBox,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
 _log = logging.getLogger("kathoros.ui.panels.cross_project_search_panel")
 
@@ -32,16 +41,25 @@ class _SearchWorker(QThread):
     def run(self) -> None:
         try:
             if self._scope == "current":
+                import sqlite3
+
                 from kathoros.services.search_service import search_current_project
-                conn = self._pm._project_conn
-                if conn is None:
+                root = self._pm.project_root
+                if root is None:
                     self.results_ready.emit([])
                     return
+                db_path = root / "project.db"
+                if not db_path.exists():
+                    self.results_ready.emit([])
+                    return
+                conn = sqlite3.connect(str(db_path))
+                conn.row_factory = sqlite3.Row
                 name = self._pm.project_name or ""
                 results = search_current_project(conn, self._query, project_name=name)
+                conn.close()
             else:
-                from kathoros.services.search_service import search_all_projects
                 from kathoros.services.project_manager import PROJECTS_DIR
+                from kathoros.services.search_service import search_all_projects
                 results = search_all_projects(PROJECTS_DIR, self._query)
             self.results_ready.emit(results)
         except Exception as exc:

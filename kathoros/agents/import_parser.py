@@ -59,31 +59,35 @@ def detect_batch_cycles(objects: list[dict]) -> list[str]:
         adj[obj["name"]] = deps
 
     cycles: list[str] = []
-    reported: set[frozenset] = set()   # avoid duplicate reports for same cycle
+    reported: set[frozenset] = set()
+    visited: set[str] = set()
+    rec_stack: set[str] = set()
 
-    for start in adj:
-        # DFS from each node
-        stack: list[tuple[str, list[str]]] = [(start, [start])]
-        while stack:
-            node, path = stack.pop()
-            for neighbour in adj.get(node, []):
-                if neighbour in path:
-                    # Cycle found — extract the cycle portion of the path
-                    cycle_start = path.index(neighbour)
-                    cycle_nodes = path[cycle_start:]
-                    key = frozenset(cycle_nodes)
-                    if key not in reported:
-                        reported.add(key)
-                        cycle_str = " → ".join(cycle_nodes) + f" → {neighbour}"
-                        _log.error(
-                            "CIRCULAR DEPENDENCY in import batch: %s. "
-                            "This is a potential conceptual smuggling error — "
-                            "neither object can be independently grounded.",
-                            cycle_str,
-                        )
-                        cycles.append(cycle_str)
-                elif neighbour not in path:
-                    stack.append((neighbour, path + [neighbour]))
+    def _dfs(node: str, path: list[str]) -> None:
+        visited.add(node)
+        rec_stack.add(node)
+        for neighbour in adj.get(node, []):
+            if neighbour in rec_stack:
+                idx = path.index(neighbour)
+                cycle_nodes = path[idx:]
+                key = frozenset(cycle_nodes)
+                if key not in reported:
+                    reported.add(key)
+                    cycle_str = " → ".join(cycle_nodes) + f" → {neighbour}"
+                    _log.error(
+                        "CIRCULAR DEPENDENCY in import batch: %s. "
+                        "This is a potential conceptual smuggling error — "
+                        "neither object can be independently grounded.",
+                        cycle_str,
+                    )
+                    cycles.append(cycle_str)
+            elif neighbour not in visited:
+                _dfs(neighbour, path + [neighbour])
+        rec_stack.discard(node)
+
+    for node in adj:
+        if node not in visited:
+            _dfs(node, [node])
 
     return cycles
 

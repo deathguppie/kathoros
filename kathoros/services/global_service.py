@@ -4,6 +4,7 @@ Owns settings reads/writes and agent registry operations.
 UI must not import db.queries directly for global.db operations.
 """
 import logging
+
 from kathoros.db import queries
 
 _log = logging.getLogger("kathoros.services.global_service")

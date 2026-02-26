@@ -6,6 +6,7 @@ API key loaded from KeyStore at runtime only.
 """
 import logging
 from typing import Callable
+
 from kathoros.config.key_store import load_key
 
 _log = logging.getLogger("kathoros.agents.backends.openai_backend")
@@ -51,9 +52,10 @@ class OpenAIBackend:
                 stream=True,
             ) as stream:
                 for chunk in stream:
-                    delta = chunk.choices[0].delta.content if chunk.choices else None
-                    if delta:
-                        on_chunk(delta)
+                    if chunk.choices and chunk.choices[0].delta:
+                        delta = chunk.choices[0].delta.content
+                        if delta:
+                            on_chunk(delta)
             on_done()
         except Exception as exc:
             _log.warning("openai stream error: %s", exc)

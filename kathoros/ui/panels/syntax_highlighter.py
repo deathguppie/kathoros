@@ -4,11 +4,11 @@ Supports python, markdown, latex, text.
 Plugs into any QPlainTextEdit or QTextEdit document.
 """
 import logging
-from PyQt6.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QFont
-from PyQt6.QtCore import Qt
+
 from pygments import lex
+from pygments.lexers import MarkdownLexer, PythonLexer, TexLexer, TextLexer
 from pygments.token import Token
-from pygments.lexers import PythonLexer, MarkdownLexer, TexLexer, TextLexer
+from PyQt6.QtGui import QColor, QSyntaxHighlighter, QTextCharFormat
 
 _log = logging.getLogger("kathoros.ui.panels.syntax_highlighter")
 

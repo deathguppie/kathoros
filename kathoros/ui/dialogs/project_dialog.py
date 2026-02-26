@@ -4,13 +4,25 @@ Returns project info to main window via accepted signal.
 No DB access here — delegates to ProjectManager.
 """
 from __future__ import annotations
+
 import logging
-from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QMessageBox, QTableWidget, QTableWidgetItem,
-    QCheckBox, QHeaderView, QAbstractItemView, QWidget
-)
+
 from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import (
+    QAbstractItemView,
+    QCheckBox,
+    QDialog,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
 _log = logging.getLogger("kathoros.ui.dialogs.project_dialog")
 

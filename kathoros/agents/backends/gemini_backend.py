@@ -5,6 +5,7 @@ API key loaded from KeyStore at runtime only.
 """
 import logging
 from typing import Callable
+
 from kathoros.config.key_store import load_key
 
 _log = logging.getLogger("kathoros.agents.backends.gemini_backend")
@@ -37,9 +38,10 @@ class GeminiBackend:
                 }
                 for m in messages
             ]
-            config = {}
+            config = None
             if system_prompt:
-                config["system_instruction"] = system_prompt
+                from google.genai import types
+                config = types.GenerateContentConfig(system_instruction=system_prompt)
             response = client.models.generate_content_stream(
                 model=self.model,
                 contents=contents,

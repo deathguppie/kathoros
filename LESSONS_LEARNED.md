@@ -343,3 +343,173 @@ for c, val in enumerate(row):
 
 The `QTableWidget` edit trigger (`DoubleClicked`) still fires, but Qt silently ignores it for
 items without `ItemIsEditable`. No custom event filter needed.
+
+---
+
+## QThread Custom Signal Named `finished` — Silent Lifecycle Break
+
+**Problem:** Defining `finished = pyqtSignal()` on any `QThread` subclass silently shadows
+`QThread.finished`, which Qt emits internally when the thread's `run()` returns. The custom
+signal replaces the built-in one, breaking thread lifecycle management and causing connected
+slots to fire unreliably or not at all.
+
+**Fix:** Rename the signal to something descriptive:
+```python
+response_done = pyqtSignal()   # good — unique name
+finished      = pyqtSignal()   # bad  — shadows QThread.finished
+```
+
+This applies to ALL QThread subclasses, not just agent workers. The `AgentWorker` class was
+renamed from `finished` to `response_done` and all dispatcher connections updated.
+
+---
+
+## SQL Injection via Dynamic Column Names
+
+**Problem:** `update_agent()` in `queries.py` accepted `**fields` and interpolated the keys
+directly into SQL via f-string (`f"{k} = ?"`). While values used parameterized `?`, the column
+names were unvalidated — a malicious key like `"name; DROP TABLE agents --"` would inject SQL.
+
+**Fix:** Always whitelist allowed column names before interpolating them:
+```python
+_AGENT_EDITABLE = {"name", "alias", "type", "provider", ...}
+
+def update_agent(conn, agent_id, **fields):
+    safe = {k: v for k, v in fields.items() if k in _AGENT_EDITABLE}
+```
+
+This mirrors the existing `_OBJECT_EDITABLE` pattern used by `update_object()`.
+
+---
+
+## Path Traversal in Key Storage
+
+**Problem:** `key_store.py` used the `provider` parameter directly in file paths:
+`_KEYS_DIR / f"{provider}.key"`. A provider value like `"../../etc/cron.d/malicious"` would
+write to an arbitrary location.
+
+**Fix:** Validate provider names with a strict regex (`^[\w\-]+$`) and verify the resolved
+path stays under `_KEYS_DIR`:
+```python
+_SAFE_PROVIDER = re.compile(r"^[\w\-]+$")
+
+def _safe_path(provider: str) -> Path:
+    if not _SAFE_PROVIDER.match(provider):
+        raise ValueError(f"Invalid provider name: {provider!r}")
+    path = (_KEYS_DIR / f"{provider}.key").resolve()
+    if not str(path).startswith(str(_KEYS_DIR.resolve())):
+        raise ValueError(f"Path traversal blocked")
+    return path
+```
+
+---
+
+## JSON Schema Depth Calculation for Arrays
+
+**Problem:** `_schema_depth()` in `validator.py` had an unreachable `elif` branch (identical
+condition to the `if` above it). The `"items"` keyword in JSON Schema is a single sub-schema
+dict, but the code iterated `.values()` on it — treating it like `"properties"` (a dict of
+name→schema). This meant array item schema depth was calculated incorrectly.
+
+**Fix:** Handle `"properties"` and `"items"` separately:
+```python
+if key == "properties" and isinstance(child, dict):
+    for v in child.values():
+        max_d = max(max_d, _schema_depth(v, current + 1))
+elif key == "items" and isinstance(child, dict):
+    max_d = max(max_d, _schema_depth(child, current + 1))
+```
+
+---
+
+## Cycle Detection: Avoid Path-Copying DFS
+
+**Problem:** `detect_batch_cycles()` in `import_parser.py` used iterative DFS with
+`stack.append((neighbour, path + [neighbour]))` — copying the full path list at each step.
+For a dense DAG with N objects, this explores an exponential number of paths and can OOM
+or freeze the application on normal (non-malicious) import batches of ~30 objects.
+
+**Fix:** Use standard DFS with a global `visited` set and a `rec_stack` (recursion stack)
+set — O(V+E) time, no path copying:
+```python
+visited, rec_stack = set(), set()
+def _dfs(node, path):
+    visited.add(node); rec_stack.add(node)
+    for nb in adj.get(node, []):
+        if nb in rec_stack: ...      # cycle found
+        elif nb not in visited: _dfs(nb, path + [nb])
+    rec_stack.discard(node)
+```
+
+---
+
+## Cross-Thread SQLite Access in QThread Workers
+
+**Problem:** `_SearchWorker` in `cross_project_search_panel.py` accessed
+`self._pm._project_conn` — a SQLite connection created on the main thread — from a worker
+QThread. SQLite connections are not thread-safe by default and raise
+`ProgrammingError: SQLite objects created in a thread can only be used in that same thread`.
+
+**Fix:** Open a separate connection inside the worker thread's `run()` method:
+```python
+def run(self):
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    results = search_current_project(conn, self._query, ...)
+    conn.close()
+```
+
+Never pass a `sqlite3.Connection` across thread boundaries unless created with
+`check_same_thread=False`.
+
+---
+
+## Preserving Async State Across Callbacks
+
+**Problem:** `_pending_import_paths` was cleared in `_on_message_submitted()` (sync, before
+dispatch) but read in `_on_agent_done()` (async, after agent completes). The list was always
+empty by the time the callback fired, so source_file backfill never worked.
+
+**Fix:** Copy the state to a separate attribute before clearing:
+```python
+self._active_import_paths = list(pending)
+self._pending_import_paths = []
+# ... later in _on_agent_done:
+import_names = [p.split("/")[-1] for p in self._active_import_paths]
+self._active_import_paths = []
+```
+
+General rule: if a callback reads state set during dispatch, preserve it in a separate
+attribute that only the callback clears.
+
+---
+
+## Notes Panel: Signal for Content Loading on Selection Change
+
+**Problem:** `NotesPanel._on_row_changed()` saved the previous note and updated
+`_current_note_id`, but never loaded the new note's content. The editor showed stale
+content; edits would be saved against the wrong note.
+
+**Fix:** Add a `note_selected = pyqtSignal(int)` signal, emitted in `_on_row_changed()`.
+Main window connects this to `_on_note_selected()` which calls `pm.get_note(id)` and
+`panel.set_current_note(note)`. This follows the existing pattern where panels communicate
+via signals and main_window handles data access.
+
+---
+
+## AuditWindow: Stop Dispatchers on Dialog Close
+
+**Problem:** Closing the audit dialog while agents were still streaming left dispatchers
+running. Their `on_chunk` callbacks wrote to `QPlainTextEdit` widgets on the now-destroyed
+dialog, causing `RuntimeError: wrapped C/C++ object has been deleted`.
+
+**Fix:** Override `reject()` and also stop dispatchers in `_finalize_audit()`:
+```python
+def reject(self):
+    for d in self._dispatchers:
+        d.stop()
+    self._dispatchers.clear()
+    super().reject()
+```
+
+General rule: any dialog that owns async workers must stop them before closing.

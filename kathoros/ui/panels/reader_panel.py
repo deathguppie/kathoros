@@ -9,16 +9,30 @@ import logging
 from pathlib import Path
 
 import fitz  # pymupdf
-
 from PyQt6.QtCore import (
-    Qt, QObject, QThread, QTimer, pyqtSignal, pyqtSlot,
+    QObject,
+    Qt,
+    QThread,
+    QTimer,
+    pyqtSignal,
+    pyqtSlot,
 )
 from PyQt6.QtGui import (
-    QImage, QPixmap, QCursor, QGuiApplication, QKeySequence,
+    QCursor,
+    QGuiApplication,
+    QImage,
+    QPixmap,
 )
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QScrollArea, QFileDialog, QSizePolicy, QLineEdit, QCheckBox,
+    QFileDialog,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
 )
 
 _log = logging.getLogger("kathoros.ui.panels.reader_panel")
@@ -126,7 +140,7 @@ class PageWidget(QWidget):
     # Paint -----------------------------------------------------------------
 
     def paintEvent(self, event) -> None:
-        from PyQt6.QtGui import QPainter, QColor
+        from PyQt6.QtGui import QColor, QPainter
         painter = QPainter(self)
         if self._pixmap:
             # Centre pixmap in widget
@@ -379,7 +393,7 @@ class ReaderPanel(QWidget):
         self._request_render()
 
     def clear(self) -> None:
-        self._page_widget.set_page(QPixmap(), 1.0, None) if False else None
+        self._page_widget.set_page(QPixmap(), 1.0, None)
         self._filename_label.setText("No file loaded")
         self._page_input.clear()
         self._total_label.setText("/ —")
@@ -504,6 +518,7 @@ class ReaderPanel(QWidget):
         if self._render_thread.isRunning():
             self._render_thread.quit()
             self._render_thread.wait(2000)
+        self._renderer.close_doc()
         if self._doc:
             self._doc.close()
             self._doc = None

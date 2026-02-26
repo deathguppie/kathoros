@@ -6,13 +6,22 @@ and batch save via UPDATE statements keyed on rowid.
 import logging
 import sqlite3
 
-from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QLineEdit, QTableWidget, QTableWidgetItem, QComboBox,
-    QHeaderView, QAbstractItemView, QMessageBox,
-)
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QFont
+from PyQt6.QtWidgets import (
+    QAbstractItemView,
+    QComboBox,
+    QDialog,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+)
 
 _log = logging.getLogger("kathoros.ui.dialogs.sqlite_spreadsheet_dialog")
 

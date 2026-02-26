@@ -27,13 +27,12 @@ from __future__ import annotations
 import json
 import re
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 from kathoros.agents.envelope import ENVELOPE_KEY, parse_envelope
-from kathoros.core.enums import TrustLevel, AccessMode
+from kathoros.core.enums import AccessMode, TrustLevel
 from kathoros.router.models import ToolRequest
-
 
 # ---------------------------------------------------------------------------
 # Compiled regex patterns — compiled once at import time

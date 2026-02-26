@@ -4,6 +4,7 @@ Accepts nodes and edges, returns them for the UI layer to apply to the
 GraphPanel. The executor itself is UI-free — main_window handles rendering.
 """
 import logging
+
 from kathoros.router.models import ToolDefinition
 
 _log = logging.getLogger("kathoros.tools.tool_graph_update")

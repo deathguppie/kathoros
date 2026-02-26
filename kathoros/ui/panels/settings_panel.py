@@ -4,12 +4,22 @@ No DB calls — receives settings dict, emits changes via signal.
 Caller (main window) reads/writes DB via ProjectManager.
 """
 import logging
-from kathoros.config.key_store import save_key, masked, key_exists
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
-    QLabel, QComboBox, QCheckBox, QLineEdit, QPushButton, QScrollArea
-)
+
 from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
+)
+
+from kathoros.config.key_store import masked, save_key
 
 _log = logging.getLogger("kathoros.ui.panels.settings_panel")
 
@@ -124,7 +134,7 @@ class SettingsPanel(QWidget):
             self.load_settings(self._last_loaded)
 
     def _build_api_key_section(self) -> QWidget:
-        from PyQt6.QtWidgets import QGroupBox, QFormLayout, QLineEdit
+        from PyQt6.QtWidgets import QFormLayout, QGroupBox, QLineEdit
         group = QGroupBox("API Keys")
         group.setStyleSheet("QGroupBox { color: #cccccc; border: 1px solid #333; margin-top: 8px; padding: 8px; }")
         form = QFormLayout(group)

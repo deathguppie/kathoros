@@ -8,6 +8,7 @@ Executor must not call the router (INV-1).
 """
 import logging
 import re
+
 from kathoros.router.models import ToolDefinition
 
 _log = logging.getLogger("kathoros.tools.tool_db_execute")
@@ -17,7 +18,7 @@ _ALLOWED_PREFIXES = ("select", "insert", "update", "delete", "create", "alter", 
 
 # Dangerous operations that are never allowed
 _BLOCKED_PATTERNS = re.compile(
-    r"\b(drop\s+database|attach\s+database|detach\s+database)\b",
+    r"\b(drop\s+(database|table|view|trigger|index)|attach\s+database|detach\s+database)\b",
     re.IGNORECASE,
 )
 

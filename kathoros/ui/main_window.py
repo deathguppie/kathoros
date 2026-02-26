@@ -3,42 +3,39 @@ Kathoros main application window.
 Layout and wiring only — no business logic, no tool execution.
 UI components may request approval but must never execute tools directly (INV-1).
 """
-from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QSplitter, QVBoxLayout,
-    QWidget, QLabel, QTabWidget
-)
-from PyQt6.QtCore import Qt, QSettings
-from PyQt6.QtGui import QAction, QFont
-import sys
 import logging
-from kathoros.ui.panels.objects_panel import ObjectsPanel as _RealObjectsPanel
+
+from PyQt6.QtCore import QSettings, Qt
+from PyQt6.QtGui import QAction
+from PyQt6.QtWidgets import QApplication, QMainWindow, QSplitter, QTabWidget, QVBoxLayout, QWidget
+
+from kathoros.agents.dispatcher import AgentDispatcher
+from kathoros.agents.import_parser import parse_object_suggestions
+from kathoros.core.constants import APP_NAME, APP_VERSION
+from kathoros.core.enums import AccessMode, Decision, TrustLevel
+from kathoros.services.git_service import GitService
+from kathoros.services.tool_service import ToolService
+from kathoros.ui.dialogs.import_approval_dialog import ImportApprovalDialog
+from kathoros.ui.dialogs.tool_approval_dialog import request_approval
+from kathoros.ui.panels.agent_manager_panel import AgentManagerPanel
+from kathoros.ui.panels.ai_input_panel import AIInputPanel as _RealAIInputPanel
+from kathoros.ui.panels.ai_output_panel import AIOutputPanel as _RealAIOutputPanel
 from kathoros.ui.panels.audit_log_panel import AuditLogPanel
-from kathoros.ui.panels.reader_panel import ReaderPanel
-from kathoros.ui.panels.import_panel import ImportPanel
-from kathoros.ui.panels.sagemath_panel import SageMathPanel
-from kathoros.ui.panels.latex_panel import LaTeXPanel
-from kathoros.ui.panels.matplot_panel import MatPlotPanel
-from kathoros.ui.panels.graph_panel import GraphPanel
+from kathoros.ui.panels.cross_project_search_panel import CrossProjectSearchPanel
 from kathoros.ui.panels.editor_panel import EditorPanel
 from kathoros.ui.panels.git_panel import GitPanel
-from kathoros.ui.panels.shell_panel import ShellPanel
+from kathoros.ui.panels.graph_panel import GraphPanel
+from kathoros.ui.panels.import_panel import ImportPanel
+from kathoros.ui.panels.latex_panel import LaTeXPanel
+from kathoros.ui.panels.matplot_panel import MatPlotPanel
 from kathoros.ui.panels.notes_panel import NotesPanel
+from kathoros.ui.panels.objects_panel import ObjectsPanel as _RealObjectsPanel
+from kathoros.ui.panels.reader_panel import ReaderPanel
 from kathoros.ui.panels.results_panel import ResultsPanel
+from kathoros.ui.panels.sagemath_panel import SageMathPanel
 from kathoros.ui.panels.settings_panel import SettingsPanel
-from kathoros.ui.panels.agent_manager_panel import AgentManagerPanel
+from kathoros.ui.panels.shell_panel import ShellPanel
 from kathoros.ui.panels.sqlite_explorer_panel import SQLiteExplorerPanel
-from kathoros.ui.panels.cross_project_search_panel import CrossProjectSearchPanel
-from kathoros.ui.panels.ai_output_panel import AIOutputPanel as _RealAIOutputPanel
-from kathoros.ui.panels.ai_input_panel import AIInputPanel as _RealAIInputPanel
-from kathoros.core.constants import APP_NAME, APP_VERSION
-from kathoros.core.enums import AccessMode, TrustLevel, Decision
-from kathoros.agents.dispatcher import AgentDispatcher
-from kathoros.services.tool_service import ToolService
-from kathoros.services.git_service import GitService
-from kathoros.ui.dialogs.tool_approval_dialog import request_approval
-from kathoros.ui.dialogs.import_approval_dialog import ImportApprovalDialog
-from kathoros.agents.import_parser import parse_object_suggestions
-from kathoros.agents.prompts import IMPORT_SYSTEM_PROMPT, RESEARCH_SYSTEM_PROMPT
 
 _log = logging.getLogger("kathoros.ui.main_window")
 
@@ -291,6 +288,7 @@ class KathorosMainWindow(QMainWindow):
         self._save_session_snapshot()
         settings = QSettings("Kathoros", "Kathoros")
         settings.setValue("splitterState", self.centralWidget().saveState())
+        super().closeEvent(event)
 
     def _on_audit_requested(self, object_id: int) -> None:
         if self._pm is None or self._pm.session_service is None:
@@ -397,8 +395,9 @@ class KathorosMainWindow(QMainWindow):
 
     def _open_file_in_reader(self, path: str) -> None:
         from pathlib import Path
-        from kathoros.ui.panels.reader_panel import ReaderPanel
+
         from kathoros.ui.panels.editor_panel import EditorPanel
+        from kathoros.ui.panels.reader_panel import ReaderPanel
 
         docs_group = self._right_panel.findChild(DocumentsTabGroup)
 
@@ -516,8 +515,9 @@ class KathorosMainWindow(QMainWindow):
             _log.warning("failed to load settings: %s", exc)
 
     def _on_add_agent(self) -> None:
-        from kathoros.ui.dialogs.agent_dialog import AgentDialog
         from PyQt6.QtWidgets import QMessageBox
+
+        from kathoros.ui.dialogs.agent_dialog import AgentDialog
         if self._pm is None or self._pm.global_service is None:
             return
         dialog = AgentDialog(parent=self)
@@ -532,8 +532,9 @@ class KathorosMainWindow(QMainWindow):
             QMessageBox.critical(self, "Error", str(exc))
 
     def _on_edit_agent(self, agent_id: int) -> None:
-        from kathoros.ui.dialogs.agent_dialog import AgentDialog
         from PyQt6.QtWidgets import QMessageBox
+
+        from kathoros.ui.dialogs.agent_dialog import AgentDialog
         if self._pm is None or self._pm.global_service is None:
             return
         agent = self._pm.global_service.get_agent(agent_id)
@@ -652,11 +653,13 @@ class KathorosMainWindow(QMainWindow):
             panel.note_create_requested.disconnect()
             panel.note_delete_requested.disconnect()
             panel.note_save_requested.disconnect()
+            panel.note_selected.disconnect()
         except (RuntimeError, TypeError):
             pass
         panel.note_create_requested.connect(self._on_note_create)
         panel.note_delete_requested.connect(self._on_note_delete)
         panel.note_save_requested.connect(self._on_note_save)
+        panel.note_selected.connect(self._on_note_selected)
         panel.load_notes(self._pm.list_notes())
 
     def _wire_shell_panel(self) -> None:
@@ -687,15 +690,24 @@ class KathorosMainWindow(QMainWindow):
             panel.load_notes(self._pm.list_notes())
             # Load content for the currently displayed note if it changed
             cur_id = panel._current_note_id
-            if cur_id is not None and cur_id != note_id and self._pm._project_conn is not None:
-                row = self._pm._project_conn.execute(
-                    "SELECT id, title, content, format FROM notes WHERE id = ?", (cur_id,)
-                ).fetchone()
-                if row:
-                    panel.set_current_note(dict(row))
+            if cur_id is not None and cur_id != note_id:
+                note = self._pm.get_note(cur_id)
+                if note:
+                    panel.set_current_note(note)
+
+    def _on_note_selected(self, note_id: int) -> None:
+        """Load the selected note's content into the editor."""
+        if self._pm is None:
+            return
+        note = self._pm.get_note(note_id)
+        if note:
+            panel = self.findChild(NotesPanel)
+            if panel:
+                panel.set_current_note(note)
 
     def _on_export_notes(self, fmt: str) -> None:
         from pathlib import Path
+
         from PyQt6.QtWidgets import QFileDialog, QMessageBox
         panel = self.findChild(NotesPanel)
         if panel is None:
@@ -755,6 +767,7 @@ class KathorosMainWindow(QMainWindow):
             context = self._build_import_context(pending)
             _log.info("context length: %d chars", len(context))
             text = f"{context}\n\n{text}"
+            self._active_import_paths = list(pending)
             self._pending_import_paths = []
             if hasattr(self, '_import_panel') and self._import_panel:
                 self._import_panel._pending_paths = []
@@ -984,7 +997,8 @@ class KathorosMainWindow(QMainWindow):
         sections = []
         for p in paths:
             try:
-                content = open(p).read(8192)
+                with open(p, encoding="utf-8", errors="replace") as f:
+                    content = f.read(8192)
                 name = p.split('/')[-1]
                 sections.append(f'--- {name} ---\n{content}')
             except Exception as exc:
@@ -1044,6 +1058,7 @@ class KathorosMainWindow(QMainWindow):
     def _import_json_directly(self, paths: list) -> None:
         """Parse pre-formatted JSON import files without going through the AI."""
         from pathlib import Path
+
         from kathoros.agents.import_parser import parse_object_suggestions
         suggestions = []
         for p in paths:
@@ -1292,7 +1307,8 @@ class KathorosMainWindow(QMainWindow):
             )
             return
         # Backfill source_file for objects that didn't get one from the AI
-        import_names = [p.split("/")[-1] for p in (self._pending_import_paths or [])]
+        import_names = [p.split("/")[-1] for p in (getattr(self, '_active_import_paths', None) or [])]
+        self._active_import_paths = []
         fallback_source = ", ".join(import_names) if import_names else ""
         for s in suggestions:
             if not s.get("source_file") and fallback_source:

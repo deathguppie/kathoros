@@ -8,12 +8,21 @@ object's ID in depends_on appear as children of that object.
 """
 import json
 import logging
-from PyQt6.QtWidgets import (
-    QWidget, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QLabel,
-    QPushButton, QHBoxLayout, QMenu, QApplication, QInputDialog,
-)
-from PyQt6.QtCore import pyqtSignal, Qt
+
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor
+from PyQt6.QtWidgets import (
+    QApplication,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QMenu,
+    QPushButton,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
 _log = logging.getLogger("kathoros.ui.panels.objects_panel")
 

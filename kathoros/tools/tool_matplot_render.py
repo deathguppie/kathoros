@@ -5,6 +5,7 @@ Executor must not contain approval logic (INV-15).
 Executor must not call the router (INV-1).
 """
 import logging
+
 from kathoros.router.models import ToolDefinition
 
 _log = logging.getLogger("kathoros.tools.tool_matplot_render")

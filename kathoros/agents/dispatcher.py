@@ -4,13 +4,14 @@ and worker thread lifecycle.
 No approval logic. No tool execution. No DB writes.
 """
 import logging
-from kathoros.agents.backends.ollama_backend import OllamaBackend
+
 from kathoros.agents.backends.anthropic_backend import AnthropicBackend
-from kathoros.agents.backends.openai_backend import OpenAIBackend
 from kathoros.agents.backends.gemini_backend import GeminiBackend
+from kathoros.agents.backends.ollama_backend import OllamaBackend
+from kathoros.agents.backends.openai_backend import OpenAIBackend
 from kathoros.agents.context_builder import build_system_prompt
 from kathoros.agents.worker import AgentWorker
-from kathoros.core.enums import TrustLevel, AccessMode
+from kathoros.core.enums import AccessMode, TrustLevel
 
 _log = logging.getLogger("kathoros.agents.dispatcher")
 
@@ -76,12 +77,12 @@ class AgentDispatcher:
         if on_tool_request:
             worker.tool_request_detected.connect(on_tool_request)
         # Accumulate assistant response into history BEFORE on_done
-        worker.finished.connect(lambda: self._history.append({
+        worker.response_done.connect(lambda: self._history.append({
             "role": "assistant",
             "content": worker._buffer,
         }))
         if on_done:
-            worker.finished.connect(on_done)
+            worker.response_done.connect(on_done)
         if on_error:
             worker.error.connect(on_error)
 

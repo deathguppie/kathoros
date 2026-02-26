@@ -9,7 +9,6 @@ All path checks use resolve()+is_relative_to() — never startswith() (INV-13).
 import base64
 import hashlib
 import logging
-import shutil
 from pathlib import Path
 
 from kathoros.core.constants import ARTIFACTS_DIR

@@ -11,7 +11,9 @@ Validates JSON Schema subset:
 All failure messages contain "schema" per LLM_IMPLEMENTATION_RULES §5.
 """
 from __future__ import annotations
+
 from typing import Any
+
 from kathoros.core.exceptions import SchemaError
 
 MAX_SCHEMA_DEPTH = 10
@@ -184,9 +186,13 @@ def _schema_depth(schema: Any, current: int = 0) -> int:
     max_d = current
     for key in ("properties", "items"):
         child = schema.get(key)
-        if isinstance(child, dict):
+        if not isinstance(child, dict):
+            continue
+        if key == "properties":
+            # properties is dict of name -> sub-schema
             for v in child.values():
                 max_d = max(max_d, _schema_depth(v, current + 1))
-        elif isinstance(child, dict):
+        else:
+            # items is a single sub-schema
             max_d = max(max_d, _schema_depth(child, current + 1))
     return max_d

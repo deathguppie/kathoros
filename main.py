@@ -3,16 +3,19 @@ Kathoros — entry point.
 Launches project selector then main window.
 No business logic here.
 """
-import sys
 import logging
+import sys
 import time
 from pathlib import Path
-from PyQt6.QtWidgets import QApplication, QSplashScreen
+
+from PyQt6.QtCore import QEventLoop, Qt, QTimer
 from PyQt6.QtGui import QPixmap
-from PyQt6.QtCore import Qt, QTimer, QEventLoop
-from kathoros.ui.main_window import KathorosMainWindow
-from kathoros.ui.dialogs.project_dialog import ProjectDialog
+from PyQt6.QtWidgets import QApplication, QSplashScreen
+
 from kathoros.services.project_manager import ProjectManager
+from kathoros.ui.dialogs.project_dialog import ProjectDialog
+from kathoros.ui.main_window import KathorosMainWindow
+from kathoros.ui.theme import apply_theme
 
 logging.basicConfig(
     level=logging.INFO,
@@ -44,17 +47,7 @@ def main() -> int:
             splash.show()
             app.processEvents()
             splash_start = time.monotonic()
-    app.setStyleSheet("""
-        QWidget { background-color: #1e1e1e; color: #cccccc; }
-        QTabBar::tab { background: #2d2d2d; color: #cccccc; padding: 6px 12px; }
-        QTabBar::tab:selected { background: #3d3d3d; }
-        QSplitter::handle { background: #333333; }
-        QListWidget { background: #252525; border: 1px solid #333; }
-        QLineEdit { background: #252525; border: 1px solid #444; padding: 4px; }
-        QPushButton { background: #2d2d2d; border: 1px solid #444; padding: 6px 12px; }
-        QPushButton:hover { background: #3d3d3d; }
-        QDialog { background: #1e1e1e; }
-    """)
+    apply_theme(app)
 
     pm = ProjectManager()
     pm.open_global()

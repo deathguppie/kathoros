@@ -3,12 +3,24 @@ AgentDialog — Add or edit a Proxenos agent in the global registry.
 No DB access — returns result_data dict to caller.
 """
 from __future__ import annotations
+
 import json
 import logging
+
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
-    QLabel, QLineEdit, QComboBox, QCheckBox, QPlainTextEdit,
-    QSpinBox, QPushButton, QScrollArea, QWidget, QMessageBox
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QFormLayout,
+    QHBoxLayout,
+    QLineEdit,
+    QMessageBox,
+    QPlainTextEdit,
+    QPushButton,
+    QScrollArea,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
 )
 
 _log = logging.getLogger("kathoros.ui.dialogs.agent_dialog")

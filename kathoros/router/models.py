@@ -5,10 +5,12 @@ All fields are immutable after construction (frozen dataclasses).
 No business logic here — pure data containers.
 """
 from __future__ import annotations
+
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, Callable, Optional
-from kathoros.core.enums import AccessMode, TrustLevel, Decision
+from typing import Any, Optional
+
+from kathoros.core.enums import AccessMode, Decision, TrustLevel
 
 
 @dataclass(frozen=True)
