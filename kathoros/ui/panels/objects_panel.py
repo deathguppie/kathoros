@@ -10,7 +10,7 @@ import json
 import logging
 from PyQt6.QtWidgets import (
     QWidget, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QLabel,
-    QPushButton, QHBoxLayout, QMenu, QApplication,
+    QPushButton, QHBoxLayout, QMenu, QApplication, QInputDialog,
 )
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QColor
@@ -44,6 +44,8 @@ class ObjectsPanel(QWidget):
     object_selected = pyqtSignal(int)        # left-click — show in editor
     object_edit_requested = pyqtSignal(int)  # double-click / context menu — open dialog
     status_change_requested = pyqtSignal(int, str)
+    tags_change_requested = pyqtSignal(int, list)        # (object_id, new_tags)
+    parent_change_requested = pyqtSignal(int, list)      # (object_id, new_depends_on_ids)
     refresh_requested = pyqtSignal()
     audit_requested = pyqtSignal(int)
     open_source_requested = pyqtSignal(int)  # open source file in reader
@@ -214,6 +216,38 @@ class ObjectsPanel(QWidget):
                     s.capitalize(),
                     lambda checked=False, st=s: self.status_change_requested.emit(oid, st),
                 )
+            # --- Edit Tags ---
+            menu.addSeparator()
+            menu.addAction("Edit Tags...", lambda _oid=oid: self._edit_tags_dialog(_oid))
+
+            # --- Set Parent ---
+            parent_menu = menu.addMenu("Set Parent")
+            parent_menu.addAction(
+                "None (make root)",
+                lambda _oid=oid: self.parent_change_requested.emit(_oid, []),
+            )
+            parent_menu.addSeparator()
+            # current depends_on for this object
+            cur_obj = next((o for o in self._objects if o["id"] == oid), None)
+            cur_deps: list[int] = []
+            if cur_obj:
+                raw = cur_obj.get("depends_on") or "[]"
+                try:
+                    cur_deps = json.loads(raw) if isinstance(raw, str) else raw
+                except (ValueError, TypeError):
+                    cur_deps = []
+            for candidate in self._objects:
+                if candidate["id"] == oid:
+                    continue
+                cname = candidate.get("name", f"id={candidate['id']}")
+                act = parent_menu.addAction(
+                    cname,
+                    lambda _oid=oid, _cid=candidate["id"]: self.parent_change_requested.emit(_oid, [_cid]),
+                )
+                if candidate["id"] in cur_deps:
+                    act.setCheckable(True)
+                    act.setChecked(True)
+
             menu.addSeparator()
             name = item.text(0).split("  ", 1)[-1] if "  " in item.text(0) else item.text(0)
             menu.addAction("Copy Name", lambda: QApplication.clipboard().setText(name))
@@ -223,6 +257,21 @@ class ObjectsPanel(QWidget):
             if tooltip:
                 menu.addAction("Copy Path", lambda: QApplication.clipboard().setText(tooltip))
         menu.exec(self._tree.mapToGlobal(pos))
+
+    def _edit_tags_dialog(self, oid: int) -> None:
+        obj = next((o for o in self._objects if o["id"] == oid), None)
+        current_tags: list[str] = []
+        if obj:
+            raw = obj.get("tags") or "[]"
+            try:
+                current_tags = json.loads(raw) if isinstance(raw, str) else raw
+            except (ValueError, TypeError):
+                current_tags = []
+        prefill = ", ".join(current_tags)
+        text, ok = QInputDialog.getText(self, "Edit Tags", "Tags (comma-separated):", text=prefill)
+        if ok:
+            new_tags = [t.strip() for t in text.split(",") if t.strip()]
+            self.tags_change_requested.emit(oid, new_tags)
 
     def _on_audit_clicked(self) -> None:
         oid = self._current_id()

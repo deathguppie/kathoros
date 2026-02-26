@@ -51,14 +51,26 @@ class AgentManagerPanel(QWidget):
         )
         self._table.itemSelectionChanged.connect(self._on_selection_changed)
 
-        add_btn = QPushButton("Add")
+        _btn_style = (
+            "QPushButton { background: #2d2d2d; color: #cccccc; border: 1px solid #555; "
+            "padding: 4px 12px; min-height: 24px; } "
+            "QPushButton:hover { background: #3d3d3d; }"
+        )
+        add_btn = QPushButton("+ Add Agent")
+        add_btn.setStyleSheet(_btn_style)
         add_btn.clicked.connect(self.add_agent_requested)
         edit_btn = QPushButton("Edit")
+        edit_btn.setStyleSheet(_btn_style)
         edit_btn.clicked.connect(self._on_edit)
         delete_btn = QPushButton("Delete")
-        delete_btn.setStyleSheet("color: #f04040;")
+        delete_btn.setStyleSheet(
+            "QPushButton { background: #2d2d2d; color: #f04040; border: 1px solid #555; "
+            "padding: 4px 12px; min-height: 24px; } "
+            "QPushButton:hover { background: #3d3d3d; }"
+        )
         delete_btn.clicked.connect(self._on_delete)
         refresh_btn = QPushButton("Refresh")
+        refresh_btn.setStyleSheet(_btn_style)
         refresh_btn.clicked.connect(self.refresh_requested)
 
         toolbar = QHBoxLayout()

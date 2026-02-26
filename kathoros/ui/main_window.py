@@ -169,6 +169,8 @@ class KathorosMainWindow(QMainWindow):
         self._objects_panel.audit_requested.connect(self._on_audit_requested)
         self._objects_panel.object_edit_requested.connect(self._on_object_edit_requested)
         self._objects_panel.status_change_requested.connect(self._on_status_change_requested)
+        self._objects_panel.tags_change_requested.connect(self._on_tags_change_requested)
+        self._objects_panel.parent_change_requested.connect(self._on_parent_change_requested)
         self._objects_panel.open_source_requested.connect(self._on_open_source_requested)
         self._ai_input_panel.message_submitted.connect(self._on_message_submitted)
         self._ai_input_panel.stop_requested.connect(self._on_stop_requested)
@@ -445,6 +447,26 @@ class KathorosMainWindow(QMainWindow):
         if not result["ok"]:
             from PyQt6.QtWidgets import QMessageBox
             QMessageBox.warning(self, "Status Change Failed",
+                                result.get("error", "Unknown error"))
+        self._load_objects()
+
+    def _on_tags_change_requested(self, object_id: int, tags: list) -> None:
+        if self._pm is None or self._pm.session_service is None:
+            return
+        result = self._pm.session_service.update_object(object_id, tags=tags)
+        if not result["ok"]:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "Tag Update Failed",
+                                result.get("error", "Unknown error"))
+        self._load_objects()
+
+    def _on_parent_change_requested(self, object_id: int, depends_on: list) -> None:
+        if self._pm is None or self._pm.session_service is None:
+            return
+        result = self._pm.session_service.update_object(object_id, depends_on=depends_on)
+        if not result["ok"]:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "Parent Update Failed",
                                 result.get("error", "Unknown error"))
         self._load_objects()
 
