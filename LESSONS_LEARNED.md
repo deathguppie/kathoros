@@ -227,3 +227,119 @@ the primary work area (Documents tab) at startup.
 - SDK: `google-genai` (`from google import genai`), not `google-generativeai`.
 - Message format: role is `"user"` or `"model"` (not `"assistant"`).
 - System prompt goes in `config={"system_instruction": system_prompt}`, not in the messages list.
+
+---
+
+## Adding a New Agent Tool
+
+**Pattern:** All tools follow executor → registry → router → main_window side-effect:
+
+1. **New file:** `kathoros/tools/tool_<name>.py` with a `ToolDefinition` and an executor function
+   `execute_<name>(args, tool, project_root) -> dict`.
+2. **Registry:** Import and register in `kathoros/services/tool_service.py`:
+   - `registry.register(TOOL_DEF)` in `_build_registry()`
+   - `"<name>": execute_<name>` in the `executors={}` dict
+3. **Main window:** Add `elif tool_name == "<name>"` in `_on_tool_request` and a
+   `_apply_<name>(data)` handler for any UI side effects (panel rendering, DB writes, etc.).
+4. **System prompt:** Add PROXENOS envelope example in `context_builder.py`'s `_TOOL_ENVELOPE_HINT`.
+
+**Key design rules:**
+- Executors are **pure functions** — no Qt imports, no DB access, no approval logic (INV-15).
+- Executors validate and **pass through data**; actual side effects happen in main_window handlers.
+- Tools needing UI interaction (graph, matplot, sagemath) return data that main_window applies
+  to the relevant panel, then auto-switches to the correct tab.
+- `write_capable=True` triggers the router's approval gate (step 8).
+- `output_target` is descriptive only — routing is done by tool name in main_window.
+
+---
+
+## PROXENOS Envelope: Agent Identity and Trust Levels
+
+**Problem:** Agents at UNTRUSTED or MONITORED trust level must use the full PROXENOS envelope
+format. The simpler `{"tool": "...", "args": {...}}` format (json_struct) is detected but
+rejected at the router's envelope enforcement step (step 3).
+
+**Solution:** The system prompt must teach agents the exact PROXENOS format with their identity
+pre-filled. Pass `agent_id` and `agent_name` into the dispatch context so `context_builder.py`
+can inject them into the envelope template:
+```
+{"proxenos_tool_request": {"nonce": "<nonce>", "agent_id": "<id>", "agent_name": "<name>",
+  "tool": "<tool>", "args": {...}}}
+```
+
+**Common agent mistakes:**
+- Using `{"tool": ..., "args": ...}` without the `proxenos_tool_request` wrapper → rejected
+- Wrapping valid JSON in markdown ` ```json ` blocks → envelope scanner must extract from within
+- Dropping trailing `}` braces (truncated output) → parser repair needed
+
+---
+
+## EnvelopeParser: Handling Malformed Agent Output
+
+**Problem:** LLM agents (especially GPT-4o) frequently produce malformed tool calls:
+1. Missing trailing `}` braces (truncated JSON)
+2. Wrapping JSON in markdown ` ```json ` code blocks
+3. Using ` ```python ` blocks for code examples (falsely detected as tool calls)
+
+**Fixes applied:**
+- **Brace repair:** `_extract_embedded_envelope` tracks the last `}` position. If braces don't
+  balance, appends missing `}` characters and retries parsing. This recovers truncated envelopes.
+- **Language blocklist:** `_try_markdown_block` checks the code-block tag against a blocklist of
+  common language names (`python`, `json`, `bash`, `sql`, etc.). Prevents false tool detection.
+- **Balanced-brace walker:** `_try_json_struct` uses `_extract_balanced_json` instead of a simple
+  regex, correctly handling nested objects and arrays in tool args.
+
+---
+
+## Matplotlib Embedded Figure: Don't Use pyplot Figure Manager
+
+**Problem:** `Figure()` objects created directly (not via `plt.figure()`) are not registered with
+pyplot's figure manager. In newer matplotlib versions, `self._fig.number` raises
+`AttributeError` or returns a deprecation warning. Calling `plt.figure(self._fig.number)` fails.
+
+**Solution:** Use a `_PltProxy` class that intercepts `plt.*` calls and routes them to the
+embedded figure's axes:
+```python
+class _PltProxy:
+    def plot(self, *a, **kw): return _panel_ax.plot(*a, **kw)
+    def title(self, *a, **kw): _panel_ax.set_title(*a, **kw)
+    def xlabel(self, *a, **kw): _panel_ax.set_xlabel(*a, **kw)
+    # ... etc
+    def show(self): pass  # no-op
+    def close(self, *a, **kw): pass  # no-op
+```
+Pass `_PltProxy()` as `plt` in the exec namespace. Agent code calls `plt.plot()` etc. and it
+all draws on the embedded canvas without touching pyplot's global state.
+
+---
+
+## SQLite: execute() vs executescript()
+
+**Problem:** `sqlite3.Connection.execute()` only accepts a single SQL statement. Agents often
+send multiple semicolon-separated statements (e.g., `CREATE TABLE ...; INSERT INTO ...;`),
+which raises `"You can only execute one statement at a time."`.
+
+**Fix:** Use `conn.executescript(sql)` for write operations (CREATE, INSERT, UPDATE, DELETE).
+Keep `conn.execute(sql)` for SELECT/PRAGMA queries that need to return rows via `fetchall()`.
+`executescript()` issues an implicit COMMIT before executing, so it handles transactions
+automatically.
+
+---
+
+## SQLite Spreadsheet: Limiting Editable Columns
+
+**Pattern:** When building an editable `QTableWidget` over a database table, not all columns
+should be user-editable. Use Qt item flags to control this per-cell:
+
+```python
+_EDITABLE_COLUMNS = {"name", "tags"}
+
+for c, val in enumerate(row):
+    item = QTableWidgetItem(str(val) if val is not None else "")
+    if columns[c].lower() not in _EDITABLE_COLUMNS:
+        item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+    table.setItem(r, c, item)
+```
+
+The `QTableWidget` edit trigger (`DoubleClicked`) still fires, but Qt silently ignores it for
+items without `ItemIsEditable`. No custom event filter needed.
