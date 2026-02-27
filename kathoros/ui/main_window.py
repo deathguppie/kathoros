@@ -896,6 +896,7 @@ class KathorosMainWindow(QMainWindow):
         docs_path = str(self._pm.project_root / "docs")
         panel.set_docs_path(docs_path)
         panel.import_requested.connect(lambda p: self._on_import_requested(p))
+        panel.files_added.connect(lambda n: self._ai_output_panel.append_text(f"📁 {n} file(s) added to project docs.", role="system"))
         _log.info("import panel wired id=%s", id(panel))
 
 

@@ -513,3 +513,28 @@ def reject(self):
 ```
 
 General rule: any dialog that owns async workers must stop them before closing.
+
+---
+
+## File Import: Subfolder Organization and Copy Helpers
+
+**Problem:** Users had to manually drop files into `~/.kathoros/projects/<project>/docs/` —
+a flat folder with no organization and no way to add files from within the app.
+
+**Solution:** Added an "Add Files..." button to ImportPanel that opens `QFileDialog` and copies
+selected files into type-organized subfolders (`pdf/`, `markdown/`, `latex/`, `python/`, `json/`).
+
+**Key design decisions:**
+- **Name collision handling:** Append `_1`, `_2`, etc. rather than overwriting or prompting.
+  `shutil.copy2` preserves metadata. Check `dest.exists()` before copy, loop until unique.
+- **Subfolder mapping as module-level dict:** Keep `_SUBFOLDER_MAP` alongside `_SUPPORTED` so
+  adding a new file type requires updating both dicts in one place.
+- **No change to `refresh()`:** It already uses `rglob("*")`, so files in subfolders are
+  discovered automatically.
+- **Pure helper functions:** `_target_subfolder()` and `_copy_file_to_docs()` are module-level
+  functions (not methods) so they can be unit-tested without a QApplication instance.
+- **GC rule:** Store the button as `self._add_btn` (not a local variable) per the
+  PyQt6 widget lifecycle rule above.
+
+**Testing pattern:** For UI panels, extract pure logic into module-level functions and test
+those directly. Widget/signal behavior requires a QApplication — keep those tests separate.

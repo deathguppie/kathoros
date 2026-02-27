@@ -5,10 +5,12 @@ Emits import_requested(list[str]) with selected paths.
 No DB calls. Read-only file listing.
 """
 import logging
+import shutil
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -20,7 +22,17 @@ from PyQt6.QtWidgets import (
 
 _log = logging.getLogger("kathoros.ui.panels.import_panel")
 
-_SUPPORTED = {".md": "📄", ".txt": "📄", ".text": "📄", ".py": "🐍", ".tex": "🔬", ".json": "📦"}
+_SUPPORTED = {".md": "📄", ".txt": "📄", ".text": "📄", ".py": "🐍", ".tex": "🔬", ".json": "📦", ".pdf": "📑"}
+
+_SUBFOLDER_MAP = {
+    ".pdf": "pdf",
+    ".md": "markdown",
+    ".txt": "markdown",
+    ".text": "markdown",
+    ".tex": "latex",
+    ".py": "python",
+    ".json": "json",
+}
 
 
 def _fmt_size(b: int) -> str:
@@ -31,8 +43,32 @@ def _fmt_size(b: int) -> str:
     return f"{b//(1024*1024)}MB"
 
 
+def _target_subfolder(suffix: str) -> str:
+    """Return the docs subfolder name for a given file extension."""
+    return _SUBFOLDER_MAP.get(suffix.lower(), "other")
+
+
+def _copy_file_to_docs(src: Path, docs_root: Path) -> Path:
+    """Copy *src* into docs_root/<subfolder>/, handling name collisions."""
+    subfolder = _target_subfolder(src.suffix)
+    dest_dir = docs_root / subfolder
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    dest = dest_dir / src.name
+    if dest.exists():
+        stem, ext = src.stem, src.suffix
+        counter = 1
+        while dest.exists():
+            dest = dest_dir / f"{stem}_{counter}{ext}"
+            counter += 1
+
+    shutil.copy2(src, dest)
+    return dest
+
+
 class ImportPanel(QWidget):
     import_requested = pyqtSignal(list)
+    files_added = pyqtSignal(int)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -41,11 +77,14 @@ class ImportPanel(QWidget):
         # Top toolbar
         refresh_btn = QPushButton("Refresh")
         refresh_btn.clicked.connect(self.refresh)
+        self._add_btn = QPushButton("Add Files...")
+        self._add_btn.clicked.connect(self._on_add_files)
         self._path_label = QLabel("No project open")
         self._path_label.setStyleSheet("color: #888888; padding: 0 8px;")
 
         top = QHBoxLayout()
         top.addWidget(refresh_btn)
+        top.addWidget(self._add_btn)
         top.addWidget(self._path_label)
         top.addStretch()
 
@@ -131,3 +170,28 @@ class ImportPanel(QWidget):
             return
         _log.info("import requested: %d files", len(paths))
         self.import_requested.emit(paths)
+
+    def _on_add_files(self) -> None:
+        if not self._docs_path:
+            return
+        exts = " ".join(f"*{s}" for s in _SUPPORTED)
+        paths, _ = QFileDialog.getOpenFileNames(
+            self,
+            "Add Files to Project",
+            "",
+            f"Supported files ({exts});;All files (*)",
+        )
+        if not paths:
+            return
+        count = 0
+        for p in paths:
+            src = Path(p)
+            if src.suffix.lower() not in _SUPPORTED:
+                _log.warning("skipping unsupported file: %s", src.name)
+                continue
+            dest = _copy_file_to_docs(src, self._docs_path)
+            _log.info("copied %s -> %s", src, dest)
+            count += 1
+        if count:
+            self.refresh()
+            self.files_added.emit(count)
