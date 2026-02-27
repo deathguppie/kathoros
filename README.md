@@ -31,7 +31,7 @@ Kathoros is a **local-first desktop research environment** designed for physicis
 
 The platform combines:
 - A **multi-panel Qt workspace** for reading papers, writing notes, running code, and visualising results
-- **Three AI backends** (Anthropic Claude, OpenAI, Ollama) with streaming output and a structured import pipeline
+- **Four AI backends** (Anthropic Claude, OpenAI, Google Gemini, Ollama) with streaming output and a structured import pipeline
 - A **secure tool router** (11-step pipeline) that validates, audits, and gates every agent action
 - A **knowledge graph** of typed, versioned research objects with epistemic integrity enforcement
 - **Git-native version control** of your research objects, tracked inside the app
@@ -43,9 +43,11 @@ The platform combines:
 ### AI Agent Integration
 - **Anthropic Claude** (claude-sonnet-4-6, claude-opus-4-6, etc.) via official SDK with streaming
 - **OpenAI / GPT-4** via `openai` SDK
+- **Google Gemini** (gemini-2.0-flash, etc.) via `google-genai` SDK with streaming
 - **Ollama** — fully local models (Llama 3, Mistral, Phi-3, …) at `localhost:11434`; no data leaves your machine
 - Agent output is streamed live into the output panel; tool requests are intercepted and routed through the security pipeline before execution
-- **Agent Manager** — create, edit, and switch agents with per-agent system prompts and model selection
+- **Agent Manager** — create, edit, and switch agents with per-agent system prompts, model selection, trust levels, and cost tier classification
+- **8 agent tools** — `object_create`, `object_update`, `db_execute`, `file_analyze`, `file_apply_plan`, `graph_update`, `matplot_render`, `sagemath_eval` — each validated through the 11-step security pipeline
 
 ### Secure Tool Router (11-step pipeline)
 Every tool call from an agent passes through:
@@ -62,6 +64,12 @@ Every tool call from an agent passes through:
 11. Output size limit + structured audit logging
 
 Trust levels: UNTRUSTED → MONITORED → TRUSTED → PRIVILEGED. Approval policy is per-tool and per-trust level. All decisions are written to the append-only audit log.
+
+### File Import Browser
+- **"Add Files..." button** — native file dialog to select files from anywhere on disk
+- Files are automatically organized into type subfolders: `pdf/`, `markdown/`, `latex/`, `python/`, `json/`
+- Name collision handling with auto-incrementing suffixes (`file_1.pdf`, `file_2.pdf`)
+- Supported types: `.md`, `.txt`, `.text`, `.py`, `.tex`, `.json`, `.pdf`
 
 ### Structured Import Pipeline
 Drop a PDF or paste text → the agent extracts:
@@ -84,8 +92,11 @@ Objects are validated against the **epistemic integrity checker** (6 rules) befo
 ### Knowledge Objects Panel
 - **Dependency tree view** — objects are arranged as a hierarchy based on their `depends_on` links
 - Left-click → load object content into the editor panel
-- Right-click → context menu (edit, delete, view details)
+- Right-click → context menu (edit, delete, view details, **edit tags**, **set parent**)
+- **Inline tag editing** — comma-separated tags via input dialog
+- **Parent reassignment** — pick a new parent object or detach to root
 - Object types: concept, definition, derivation, prediction, evidence, open_question, data
+- Status color coding: pending (yellow), audited (blue), flagged (red), disputed (purple), committed (green)
 
 ### Editor Panel
 - Syntax-highlighted editor (Pygments + QSyntaxHighlighter)
@@ -107,10 +118,11 @@ Objects are validated against the **epistemic integrity checker** (6 rules) befo
 - Results show project, object type, and matching snippet
 
 ### Interactive Shell
-- Embeds a real `xterm` terminal inside the Qt window (Linux, via X11 `winId`)
-- `set_cwd()` method restarts the shell in the current project directory
+- Native **pty-based terminal** (pseudo-terminal via `pty.openpty()` + `subprocess.Popen`) — no external dependencies
+- Full key support: arrow keys, Ctrl+C/D/Z/L/A/E/U/K/W, Home/End, Tab, history
+- Dynamic terminal sizing via `TIOCSWINSZ` ioctl on window resize
+- Works on both **X11 and Wayland** (no xterm/X11 embedding required)
 - Toolbar shows current working directory; Restart button
-- Graceful fallback with platform-appropriate install instructions when xterm is absent
 
 ### Audit Log
 - All tool approvals, rejections, and errors are written to `tool_audit_log` in the project DB
@@ -126,7 +138,7 @@ Objects are validated against the **epistemic integrity checker** (6 rules) befo
 | Graph | Visualise the object dependency graph with networkx + matplotlib |
 | SageMath | Run SageMath 10.x expressions in a sandboxed conda subprocess |
 | Matplotlib | Plot data from objects or manual Python snippets |
-| SQLite Explorer | Browse raw project and global database tables |
+| SQLite Explorer | Browse raw project and global database tables; **fullscreen editable spreadsheet** with dirty-cell tracking |
 | Results | Collects and displays tool execution results |
 | Settings | Per-project settings with global defaults; safety toggles |
 
@@ -144,7 +156,7 @@ kathoros_main/
 ├── kathoros/
 │   ├── core/                   # Constants, exceptions, enums
 │   ├── router/                 # 11-step secure tool router + registry + validator
-│   ├── agents/                 # Agent workers, backends (Anthropic/OpenAI/Ollama), envelope parser
+│   ├── agents/                 # Agent workers, backends (Anthropic/OpenAI/Gemini/Ollama), envelope parser
 │   ├── epistemic/              # Epistemic integrity checker (6 rules)
 │   ├── db/                     # SQLite migrations + query layer
 │   ├── services/               # Project manager, git service, search service, global service
@@ -158,7 +170,7 @@ kathoros_main/
 │   └── build_macos.sh          # (planned) PyInstaller macOS bundle
 ├── docs/
 │   └── porting-macos.md        # macOS porting requirements
-├── tests/                      # pytest — 130+ tests across router, epistemic, DB layers
+├── tests/                      # pytest — 190+ tests across router, epistemic, DB, UI layers
 └── Dockerfile.build            # Ubuntu 22.04 build image (portable AppImage)
 ```
 
@@ -226,6 +238,14 @@ Or set it in **Settings → API Keys** inside the app.
 export OPENAI_API_KEY=sk-...
 ```
 
+### Google Gemini
+
+```bash
+export GEMINI_API_KEY=...
+```
+
+Or set it in **Settings → API Keys** inside the app. Default model: `gemini-2.0-flash`.
+
 ### Ollama (fully local, no API key needed)
 
 ```bash
@@ -259,6 +279,7 @@ ollama pull llama3
 | matplotlib | ≥ 3.8 | Plotting + LaTeX rendering |
 | networkx | ≥ 3.2 | Dependency graph |
 | Pygments | ≥ 2.19 | Syntax highlighting |
+| google-genai | ≥ 1.0 | Gemini backend |
 | ollama | ≥ 0.6 | Local model backend |
 | pandas | ≥ 2.0 | Data handling |
 
@@ -279,4 +300,4 @@ See [`docs/porting-macos.md`](docs/porting-macos.md) for the full porting guide 
 
 ---
 
-<p align="center"><em>Built with PyQt6 · SQLite FTS5 · PyMuPDF · Anthropic API</em></p>
+<p align="center"><em>Built with PyQt6 · SQLite FTS5 · PyMuPDF · Anthropic · OpenAI · Google Gemini · Ollama</em></p>

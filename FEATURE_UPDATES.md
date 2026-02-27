@@ -251,3 +251,126 @@ Rule: If a change affects security behavior or invariants, update INVARIANTS.md 
 - Affects invariants: INV-13 (path enforcement), INV-14 (run-scope)
 - The one approved `startswith` use (run_id prefix check, step 7) is annotated with `# nosec startswith`
 - New test: `tests/unit/router/test_static_hygiene.py::TestNoStartswithInPathCode`
+
+---
+
+## 2026-02-23 — Google Gemini backend
+**Type:** feature
+**Scope:** agents
+**Status:** implemented
+
+### Summary
+- Added `GeminiBackend` as the fourth AI provider backend
+- SDK: `google-genai` (`from google import genai`), streaming via `GenerateContentConfig`
+- Default model: `gemini-2.0-flash`
+
+### Behavioral changes
+- Before: 3 agent backends (Anthropic, OpenAI, Ollama)
+- After: 4 agent backends (+ Google Gemini)
+
+### Security / invariants impact
+- Affects invariants: none (follows existing backend contract)
+- API key loaded via `load_key()` at runtime, never stored on `self`
+- Backend is a pure API client — no Qt, no subprocess, no DB access
+
+### Migration / compatibility
+- DB migration: no
+- Backward compatibility: preserved (additive only)
+
+---
+
+## 2026-02-24 — Agent tool system (8 tools)
+**Type:** feature
+**Scope:** tools, agents, UI
+**Status:** implemented
+
+### Summary
+- Registered 8 agent tools: `object_create`, `object_update`, `db_execute`, `file_analyze`, `file_apply_plan`, `graph_update`, `matplot_render`, `sagemath_eval`
+- Tools follow executor → registry → router → main_window side-effect pattern
+- Each tool has a frozen `ToolDefinition` with JSON Schema validation
+
+### Behavioral changes
+- Before: agents could only produce text output
+- After: agents can create/update objects, query the DB, analyze files, render plots, evaluate SageMath, and update the knowledge graph — all through the 11-step security pipeline
+
+### Security / invariants impact
+- Affects invariants: INV-1 (tool execution via router only), INV-15 (executors are pure functions)
+- Write-capable tools require active run scope (INV-14)
+- All tool calls audited with SHA-256 hash of args (INV-17)
+
+### Migration / compatibility
+- DB migration: no
+- Backward compatibility: preserved
+
+---
+
+## 2026-02-24 — Fullscreen SQLite spreadsheet + object tag/parent editing
+**Type:** feature
+**Scope:** UI
+**Status:** implemented
+
+### Summary
+- Added fullscreen editable spreadsheet dialog launched from SQLite Explorer
+- Object context menu now includes "Edit Tags..." and "Set Parent" options
+- Agent manager buttons styled with trust-level color coding
+
+### Behavioral changes
+- Before: SQLite Explorer was read-only; object tags and parents could only be changed via edit dialog
+- After: inline tag editing, parent reassignment via context menu, spreadsheet editing with dirty-cell tracking and batch save
+
+### Security / invariants impact
+- Affects invariants: none
+- Spreadsheet editable columns limited to `name` and `tags` (whitelist enforced via Qt item flags)
+
+### Migration / compatibility
+- DB migration: no
+- Backward compatibility: preserved
+
+---
+
+## 2026-02-25 — 19 bug fixes, security hardening, and code cleanup
+**Type:** security + bugfix
+**Scope:** router, db, agents, tools, UI
+**Status:** implemented
+
+### Summary
+- Fixed SQL injection via dynamic column names in `update_agent()` — added `_AGENT_EDITABLE` whitelist
+- Fixed path traversal in key storage — strict regex + resolve() containment check
+- Fixed cycle detection OOM — replaced path-copying DFS with O(V+E) algorithm
+- Fixed cross-thread SQLite access in search worker — separate connection per thread
+- Fixed async state loss between dispatch and callback — `_active_import_paths` pattern
+- 14 additional minor fixes and cleanup
+
+### Security / invariants impact
+- SQL injection, path traversal, and resource exhaustion vulnerabilities resolved
+- No new invariants; strengthens INV-13 (path enforcement) and INV-17 (audit logging)
+
+### Migration / compatibility
+- DB migration: no
+- Backward compatibility: preserved
+
+---
+
+## 2026-02-26 — File import browser with type-organized subfolders
+**Type:** feature
+**Scope:** UI
+**Status:** implemented
+
+### Summary
+- Added "Add Files..." button to ImportPanel — opens native file dialog
+- Files copied into `docs/<type>/` subfolders (pdf/, markdown/, latex/, python/, json/)
+- Added PDF (`.pdf`) to supported import types with 📑 icon
+- Name collision handling with auto-incrementing suffixes
+
+### Behavioral changes
+- Before: users manually dropped files into `~/.kathoros/projects/<project>/docs/` (flat folder)
+- After: native file dialog for selecting files from anywhere; automatic type-based organization
+
+### Security / invariants impact
+- Affects invariants: none
+- Files are copied (not moved/linked) — original files are not modified
+- New tests: 16 tests in `tests/unit/ui/test_import_panel.py`
+
+### Migration / compatibility
+- DB migration: no
+- Backward compatibility: preserved (existing flat docs/ files still discovered via rglob)
